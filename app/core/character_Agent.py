@@ -20,6 +20,7 @@ class CharacterAgent(AbstractAgent):
         返回值:
         AsyncGenerator - 该生成器将异步地从模型中获取响应。
         """
+
         try:
             async for event_data in self.model.async_sync_call_streaming(input_text):
                 yield event_data
@@ -43,10 +44,12 @@ class CharacterAgent(AbstractAgent):
 
         # 调用异步生成器方法，并直接返回生成器
         # 外部调用此方法时，需要在异步上下文中使用，例如 async with 或 async for
-        # return self._async_response_generator(input_text)
-        return self.model.normal_call(input_text)
+        return self._async_response_generator(input_text)
+        # return self.model.normal_call(input_text)
 
-
+    async def response_stream(self,input_text: str):
+        async for chunk in self.model.async_sync_call_stream_with_langchain(input_text):
+            print(chunk, end="|", flush=True)
 
     def perform_task(self, task: str, data: dict) -> int:
         return 200

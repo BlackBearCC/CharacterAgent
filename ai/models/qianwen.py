@@ -4,6 +4,9 @@ from http import HTTPStatus
 
 import aiohttp
 import dashscope
+from langchain_community.llms.tongyi import Tongyi
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
 
 dashscope.api_key = "sk-dc356b8ca42c41788717c007f49e134a"
 class QianwenModel:
@@ -32,6 +35,17 @@ class QianwenModel:
                 raise Exception(f"解析响应时出错: {e}")
         else:
             raise Exception(f"API 请求失败，状态码: {response.status_code}")
+
+
+    async def async_sync_call_stream_with_langchain(self, prompt_text):
+        llm = Tongyi(model_name="qwen-plus", top_p=0.2, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+        template = "你是谁,中文回答{new_lines}"
+        prompt = PromptTemplate(template=template,
+                                input_variables=["new_lines"])
+        output_parser = StrOutputParser()
+        chain = prompt | llm | output_parser
+        async for chunk in  chain.astream({"new_lines": prompt_text}):
+            yield chunk
 
 
     async def async_sync_call_streaming(self, prompt_text, callback=None, session_id=None, query=None):
