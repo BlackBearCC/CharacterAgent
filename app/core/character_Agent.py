@@ -48,9 +48,12 @@ class CharacterAgent(AbstractAgent):
         # return self.model.normal_call(input_text)
 
     async def response_stream(self,input_text: str):
-        async for chunk in self.model.async_sync_call_stream_with_langchain(input_text):
+        async for chunk in self.model.astream_with_langchain(input_text):
             print(chunk, end="|", flush=True)
 
+    async def response_stream_with_retriever(self,input_text: str, retriever):
+        async for chunk in self.model.astream_with_langchain_RAG(retriever,input_text):
+            print(chunk, end="|", flush=True)
     def perform_task(self, task: str, data: dict) -> int:
         return 200
 

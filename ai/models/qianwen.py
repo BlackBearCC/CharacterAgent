@@ -7,6 +7,7 @@ import dashscope
 from langchain_community.llms.tongyi import Tongyi
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 
 dashscope.api_key = "sk-dc356b8ca42c41788717c007f49e134a"
 class QianwenModel:
@@ -37,16 +38,29 @@ class QianwenModel:
             raise Exception(f"API 请求失败，状态码: {response.status_code}")
 
 
-    async def async_sync_call_stream_with_langchain(self, prompt_text):
+    async def astream_with_langchain(self, prompt_text):
         llm = Tongyi(model_name="qwen-plus", top_p=0.2, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
-        template = "你是谁,中文回答{new_lines}"
+        template = "扮演小女孩,回答问题，Question:{input}"
         prompt = PromptTemplate(template=template,
-                                input_variables=["new_lines"])
+                                input_variables=["input"])
         output_parser = StrOutputParser()
+
         chain = prompt | llm | output_parser
-        async for chunk in  chain.astream({"new_lines": prompt_text}):
+        async for chunk in  chain.astream({"input": prompt_text}):
             yield chunk
 
+    async def astream_with_langchain_RAG(self,retriever, prompt_text):
+        llm = Tongyi(model_name="qwen-plus", top_p=0.2, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+        template = "扮演小女孩,根据参考文本的内容回答问题，参考文本：{conversation_sample}Question:{input}"
+        prompt = PromptTemplate(template=template,
+                                input_variables=["conversation_sample","input"])
+        output_parser = StrOutputParser()
+        setup_and_retrieval = RunnableParallel(
+            {"conversation_sample": retriever, "input": RunnablePassthrough()}
+        )
+        chain = setup_and_retrieval | prompt | llm | output_parser
+        async for chunk in  chain.astream({"input": prompt_text}):
+            yield chunk
 
     async def async_sync_call_streaming(self, prompt_text, callback=None, session_id=None, query=None):
         # # 从环境变量读取API密钥
