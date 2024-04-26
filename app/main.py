@@ -1,5 +1,7 @@
 # main.py
 import asyncio
+import json
+import re
 
 from fastapi import FastAPI
 from langchain.chains import LLMChain
@@ -16,6 +18,7 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 
 from ai.models import QianwenModel
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
+from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -54,7 +57,7 @@ vectordb = Chroma.from_documents(documents=docs, embedding=embedding_model)
 retriever = vectordb.as_retriever()
 
 input_text = "我们在哪"
-docs = vectordb.similarity_search(query=input_text,k=3)
+docs = vectordb.similarity_search(query=input_text,k=1)
 
 
 
@@ -81,24 +84,35 @@ for doc in documents:
 # 将页面内容列表转换为一个连续的字符串
 page_contents_str = "".join(page_contents)
 # 打印全部页面内容
-print(page_contents_str)
 
 
 
+def replace_dict_placeholders(prompt_string: str, config_dict: dict) -> str:
+    def replace(match):
+        key = match.group(1)
+        return config_dict.get(key, f"{{{{{key}}}}}").format(**config_dict)
 
+    pattern = re.compile(r"\{\{(.+?)\}\}")
+    return pattern.sub(replace, prompt_string)
+
+# 加载JSON配置文件
+with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
+    config = json.load(f)
+
+filled_prompt = replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
+print(filled_prompt)
 
 llm = Tongyi(model_name="qwen-turbo", top_p=0.2, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
-template = "扮演小女孩,根据参考文本的内容回答问题，不直接使用内容，而是以活泼可爱的语气重新组织表达，参考文本：{conversation_sample}.Question:{{input}}"
-
 
 # prompt = PromptTemplate(template=template.format(conversation_sample=page_contents_str),
 #                         input_variables=[ "input"])
-prompt = PromptTemplate(template=template.format(conversation_sample=page_contents_str),
-                        input_variables=[ "conversation_sample","input"])
+prompt = PromptTemplate(template=filled_prompt,
+                        input_variables=[ "classic_scenes","input"])
 output_parser = StrOutputParser()
 setup_and_retrieval = RunnableParallel(
-    {"conversation_sample": retriever, "input": RunnablePassthrough()}
+    {"classic_scenes": retriever, "input": RunnablePassthrough()}
 )
+
 
 chain = setup_and_retrieval|prompt | llm | output_parser
 
@@ -110,7 +124,7 @@ async def main():
 
     # chain.invoke("我们在哪")
     # print(chain.invoke("我们在哪"))
-    async for chunk in chain.astream("我们在哪"):
+    async for chunk in chain.astream("你好啊？"):
         print(chunk, end="|", flush=True)
 
 
