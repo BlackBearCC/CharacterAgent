@@ -85,36 +85,51 @@ for doc in documents:
 page_contents_str = "".join(page_contents)
 # 打印全部页面内容
 
-
-
 def replace_dict_placeholders(prompt_string: str, config_dict: dict) -> str:
+    """
+    将字符串中的占位符{{key}}替换为配置字典中对应的值。如果key不存在，则保持原样返回{{key}}。
+
+    参数:
+    - prompt_string: 原始字符串，可能包含占位符。
+    - config_dict: 包含键值对的字典，用于替换占位符。
+
+    返回:
+    - 替换后的字符串。
+    """
     def replace(match):
+        # 提取匹配的占位符key，并尝试从配置字典中获取其值
         key = match.group(1)
         return config_dict.get(key, f"{{{{{key}}}}}").format(**config_dict)
 
+    # 定义正则表达式，匹配{{key}}形式的占位符
     pattern = re.compile(r"\{\{(.+?)\}\}")
+    # 使用正则表达式和替换函数，替换所有占位符
     return pattern.sub(replace, prompt_string)
 
 # 加载JSON配置文件
 with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
+# 使用函数替换占位符，生成填充后的提示字符串
 filled_prompt = replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
 print(filled_prompt)
 
+# 初始化通义模型
 llm = Tongyi(model_name="qwen-turbo", top_p=0.2, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
-# prompt = PromptTemplate(template=template.format(conversation_sample=page_contents_str),
-#                         input_variables=[ "input"])
+# 准备提示模板和输入变量
 prompt = PromptTemplate(template=filled_prompt,
                         input_variables=[ "classic_scenes","input"])
+# 解析输出的parser
 output_parser = StrOutputParser()
+# 设置检索和准备数据的流程
 setup_and_retrieval = RunnableParallel(
     {"classic_scenes": retriever, "input": RunnablePassthrough()}
 )
 
-
+# 构建处理链
 chain = setup_and_retrieval|prompt | llm | output_parser
+
 
 async def process_response(text, session_id, query):
     pass
