@@ -14,7 +14,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 import os
 
-from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
 
 from ai.models import QianwenModel
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
@@ -56,8 +56,8 @@ embedding_model = ReHuggingFaceBgeEmbeddings(
 vectordb = Chroma.from_documents(documents=docs, embedding=embedding_model)
 retriever = vectordb.as_retriever()
 
-input_text = "我们在哪"
-docs = vectordb.similarity_search(query=input_text,k=1)
+# input_text = "我们在哪"
+# docs = vectordb.similarity_search(query=input_text,k=1)
 
 
 
@@ -106,6 +106,10 @@ def replace_dict_placeholders(prompt_string: str, config_dict: dict) -> str:
     # 使用正则表达式和替换函数，替换所有占位符
     return pattern.sub(replace, prompt_string)
 
+
+
+
+
 # 加载JSON配置文件
 with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
@@ -113,6 +117,7 @@ with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
 # 使用函数替换占位符，生成填充后的提示字符串
 filled_prompt = replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
 print(filled_prompt)
+
 
 # 初始化通义模型
 llm = Tongyi(model_name="qwen-turbo", top_p=0.2, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
@@ -126,9 +131,41 @@ output_parser = StrOutputParser()
 setup_and_retrieval = RunnableParallel(
     {"classic_scenes": retriever, "input": RunnablePassthrough()}
 )
+fast_chain = setup_and_retrieval | prompt | llm | output_parser
 
-# 构建处理链
-chain = setup_and_retrieval|prompt | llm | output_parser
+deep_chain = PromptTemplate.from_template(
+    """使用思维连一步一步回到下面的问题:
+
+Question: {input}
+Answer:"""
+) | llm
+
+# 定义相似度阈值
+similarity_threshold = 0.5
+def rute_retriever(query):
+    # 检索相关文档及其分数
+    docs_and_scores = vectordb.similarity_search_with_score(query)
+
+    print(docs_and_scores)
+
+    # 计算平均相似度分数
+    scores = [score for _, score in docs_and_scores]
+    avg_score = sum(scores) / len(scores) if scores else 0
+
+    if avg_score < similarity_threshold:
+        print("==============相似度分数低于阈值，使用原始prompt和检索到的文档===============")
+        return fast_chain
+    else:
+        # 否则使用原始prompt和检索到的文档
+        print("==============相似度分数高于阈值，使用深度思考Agent===============")
+
+        docs = [doc for doc, _ in docs_and_scores]
+        return deep_chain
+
+retriever = RunnableLambda(rute_retriever)
+
+# 检索路由链
+retriever_chain = retriever
 
 
 async def process_response(text, session_id, query):
@@ -139,8 +176,13 @@ async def main():
 
     # chain.invoke("我们在哪")
     # print(chain.invoke("我们在哪"))
-    async for chunk in chain.astream("你好啊？"):
+
+    async for chunk in retriever_chain.astream("我们在哪？"):
+
         print(chunk, end="|", flush=True)
+    # async for chunk in chain.astream("你好啊？"):
+    #
+    #     print(chunk, end="|", flush=True)
 
 
 asyncio.run(main())
