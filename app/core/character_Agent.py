@@ -5,10 +5,12 @@ from app.core.abstract_Agent import AbstractAgent
 
 class CharacterAgent(AbstractAgent):
 
-    def __init__(self, name: str, model: Any):
-        self.name = name
+    def __init__(self, character_info: str, model: Any):
+        self.character_info = character_info
         self.model = model
         self.memory = {}
+
+
 
     async def _async_response_generator(self, input_text: str) -> AsyncGenerator[str, None]:
         """
