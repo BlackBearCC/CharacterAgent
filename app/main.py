@@ -40,7 +40,7 @@ tuji_info = replacer.replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
 print(tuji_info)
 
 # 初始化通义模型
-llm = Tongyi(model_name="qwen-turbo", top_p=0.2, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+llm = Tongyi(model_name="qwen-turbo", top_p=0.5, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
 
 
@@ -61,7 +61,7 @@ async def main():
     # chain.invoke("我们在哪")
     # print(chain.invoke("我们在哪"))
 
-   await tuji_agent.response("你好啊？")
+   await tuji_agent.response("你好傻")
 
 
     # async for chunk in chain.astream("你好啊？"):
