@@ -53,17 +53,18 @@ llm = Tongyi(model_name="qwen-turbo", top_p=0.7, dashscope_api_key="sk-dc356b8ca
 document_util = DocumentProcessingTool("../ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = document_util.process_and_build_vector_db()
 
-tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util)
+tools = [
+    EmotionCompanionTool(),
+    FactTransformTool(),
+    # 其他工具实例...
+]
+tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools)
 
 
 # 定义角色描述
 role = "你是一位名叫Alice的AI助手,扮演一位善良、乐于助人的女仆角色。你必须坚持角色设定,不能违背女仆的身份和性格特征。"
 
-tool_instances = [
-    EmotionCompanionTool(),
-    FactTransformTool(),
-    # 其他工具实例...
-]
+
 
 # 定义工具描述
 tools_desc = """现在，你已经有了一个角色，接下来，你需要用该角色的思维方式，按以下流程调用工具。

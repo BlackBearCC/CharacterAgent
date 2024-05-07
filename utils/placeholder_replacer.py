@@ -1,4 +1,10 @@
 import re
+from typing import List
+
+from langchain_core.tools import BaseTool
+
+from app.core.tools.dialogue_tool import DialogueTool
+
 
 class PlaceholderReplacer:
     """
@@ -28,3 +34,21 @@ class PlaceholderReplacer:
         pattern = re.compile(r"\{\{(.+?)\}\}")
         # 使用正则表达式和替换函数，替换所有占位符
         return pattern.sub(replace, prompt_string)
+
+    @staticmethod
+    def replace_tools_with_details(prompt_string: str, tools: List[DialogueTool]) -> str:
+        """
+        将字符串中的{tools}占位符替换为工具类的名称和描述。
+
+        参数:
+        - prompt_string: 原始字符串，可能包含{tools}占位符。
+        - tools: 工具类实例列表，每个实例需有name和description属性。
+
+        返回:
+        - 替换后的字符串。
+        """
+        if "{tools}" in prompt_string:
+            tools_details = "\n".join([f"Name: {tool.name}, Description: {tool.description}" for tool in tools])
+            return prompt_string.replace("{tools}", tools_details)
+        else:
+            return prompt_string

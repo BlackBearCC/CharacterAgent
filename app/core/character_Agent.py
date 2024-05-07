@@ -7,15 +7,18 @@ from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnableP
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from app.core.abstract_Agent import AbstractAgent
+from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool
 from utils.placeholder_replacer import PlaceholderReplacer
 
-
+import logging
 class CharacterAgent(AbstractAgent):
 
-    def __init__(self, character_info: str,retriever, document_util, llm):
+    def __init__(self, character_info: str,retriever, document_util, llm,tools):
         self.character_info = character_info
         self.llm = llm
         self.memory = {}
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        self.tools = {}
 
 
         self.prompt_template = PromptTemplate(template=character_info, input_variables=["classic_scenes", "input"])
@@ -34,13 +37,24 @@ class CharacterAgent(AbstractAgent):
             config = json.load(f)
 
         replacer = PlaceholderReplacer()
-        # 使用函数替换占位符，生成填充后的提示字符串
+
+        # 替换配置占位符
         tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, config)
-        print(tuji_info)
-        self.deep_prompt_template = PromptTemplate(template=tuji_info, input_variables=[ "input"])
+
+        # 替换工具占位符
+
+        final_prompt = replacer.replace_tools_with_details(tuji_info,tools)
+        logging.info("==============替换工具后的提示字符串===============\n"+final_prompt)
+
+        self.deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
 
         self.deep_chain = self.deep_prompt_template | self.llm | self.output_parser
 
+        self.chain_mapping = {}
+
+    def set_chain_mapping(self, new_mapping):
+        """设置新的 chain_mapping"""
+        self.chain_mapping = new_mapping
 
     async def rute_retriever(self, query):
         docs_and_scores = self.document_util.vectordb.similarity_search_with_score(query)
@@ -59,17 +73,43 @@ class CharacterAgent(AbstractAgent):
             return self.deep_chain
 
     async def route_post_deep_chain(self, deep_chain_output):
-        # Implement your logic here to determine which chain to use
-        # based on the deep_chain_output
-        # For example:
-        if "story" in deep_chain_output.get("result", ""):
-            print("story")
-            return self.story_chain
-        elif "poem" in deep_chain_output.get("result", ""):
-            print("poem")
-            return self.poem_chain
-        else:
-            print("No matching chain found.")
+        """
+        根据 deep_chain_output 决定使用哪一个链。
+
+        参数:
+            deep_chain_output: 一个字典，期望包含键 'action'，其值指示应使用的链。
+
+        返回:
+            字符串，表示选定的链，如果没有匹配的链，则返回 None。
+        """
+
+        try:
+            action_name = deep_chain_output.get("action")
+            if action_name is None:
+                logging.info("action_name 为空,无策略调用")
+                return None
+
+            # 验证 action_name 是否为字符串类型
+            if not isinstance(action_name, str):
+                logging.error("action_name 非字符串类型")
+                return None
+
+
+            logging.info("Agent Use Chain: %s", action_name)
+
+
+
+            selected_chain = self.chain_mapping.get(action_name)
+            if selected_chain:
+                logging.info(selected_chain)
+                return selected_chain
+            else:
+                logging.info("No matching chain found.")
+
+            return None
+
+        except Exception as e:
+            logging.error("处理 route_post_deep_chain 时发生异常: %s", str(e))
             return None
     async def response(self, prompt_text):
         retriever_lambda = RunnableLambda(self.rute_retriever)
