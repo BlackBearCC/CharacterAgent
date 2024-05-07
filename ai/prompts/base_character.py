@@ -9,6 +9,6 @@ BASE_CHARACTER_PROMPT = """
 人格或性格：{{personality}}
 语言习惯：{{language_style}}
 
-经典桥段：{classic_scenes}
+
 
 """

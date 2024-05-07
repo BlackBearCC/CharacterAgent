@@ -1,10 +1,13 @@
+import json
 from typing import Any, Dict, List, AsyncGenerator
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 
+from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from app.core.abstract_Agent import AbstractAgent
+from utils.placeholder_replacer import PlaceholderReplacer
 
 
 class CharacterAgent(AbstractAgent):
@@ -20,15 +23,23 @@ class CharacterAgent(AbstractAgent):
         self.retriever = retriever
         self.document_util = document_util
         self.llm = llm
-        self.similarity_threshold = 0.5
+        self.similarity_threshold = 0.1
 
         # Setup chains
         self.setup_and_retrieval = RunnableParallel({"classic_scenes": retriever, "input": RunnablePassthrough()})
         self.fast_chain = self.setup_and_retrieval | self.prompt_template | self.llm | self.output_parser
 
-        self.deep_chain_template = PromptTemplate.from_template(
-            "使用思维连一步一步回到下面的问题:\n\nQuestion: {input}\nAnswer:")
-        self.deep_chain = self.deep_chain_template | self.llm
+        # 加载JSON配置文件
+        with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        replacer = PlaceholderReplacer()
+        # 使用函数替换占位符，生成填充后的提示字符串
+        tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, config)
+        print(tuji_info)
+        self.deep_prompt_template = PromptTemplate(template=tuji_info, input_variables=[ "input"])
+
+        self.deep_chain = self.deep_prompt_template | self.llm | self.output_parser
 
 
     async def rute_retriever(self, query):
@@ -47,12 +58,48 @@ class CharacterAgent(AbstractAgent):
             # Although docs are calculated, they are not directly used here as per the original logic.
             return self.deep_chain
 
+    async def route_post_deep_chain(self, deep_chain_output):
+        # Implement your logic here to determine which chain to use
+        # based on the deep_chain_output
+        # For example:
+        if "story" in deep_chain_output.get("result", ""):
+            print("story")
+            return self.story_chain
+        elif "poem" in deep_chain_output.get("result", ""):
+            print("poem")
+            return self.poem_chain
+        else:
+            print("No matching chain found.")
+            return None
     async def response(self, prompt_text):
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
-
+        output = ""
         async for chunk in retriever_chain.astream(prompt_text):
-            print(chunk, end="|", flush=True)
+            # print(chunk, flush=True)
+            output += chunk
+            print("output:", output)
+        try:
+            # 将输出解析为 JSON 对象
+            json_output = json.loads(output)
+            print("\nValid JSON output:", json_output)
+            await self.route_post_deep_chain(json_output)
+        except json.JSONDecodeError:
+            print("\nInvalid JSON output")
+
+
+        #
+        # # 检查 JSON 对象中是否包含指定的关键字
+        # if "story" in json_output.get("result", "").lower():
+        #     post_deep_chain_output = await self.story_chain.arun(json_output)
+        #     print(f"\nPost Deep Chain Output: {post_deep_chain_output}")
+        # elif "poem" in json_output.get("result", "").lower():
+        #     post_deep_chain_output = await self.poem_chain.arun(json_output)
+        #     print(f"\nPost Deep Chain Output: {post_deep_chain_output}")
+        # else:
+        #     print("\nNo additional chain to run.")
+
+
 
     # async def response_stream(self,input_text: str):
     #     async for chunk in self.model.astream_with_langchain(input_text):
