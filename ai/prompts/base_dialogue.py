@@ -8,7 +8,7 @@ BASE_STRATEGY_PROMPT = BASE_CHARACTER_PROMPT+"""
 
 
 回答倾向：{answer_tendency}
-关键内容：
+关键内容：{action_input}
 上文给定了历史记录和你现在的回答倾向和关键内容帮助你回答。
 你需要根据关键内容作为指导生成回复。
 对话要求：遵循以上内容配合我进行演出。超出倾向部分无法回答就说不知道或没有办法处理，严格禁止继续回答。

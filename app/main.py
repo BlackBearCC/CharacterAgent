@@ -57,16 +57,16 @@ llm = Tongyi(model_name="qwen-turbo", top_p=0.7, dashscope_api_key="sk-dc356b8ca
 document_util = DocumentProcessingTool("../ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = document_util.process_and_build_vector_db()
 
-base_strategy = replacer.replace_dict_placeholders(BASE_STRATEGY_PROMPT, config)
-base_strategy_template = base_strategy.replace("{answer_tendency}", EMOTION_STRATEGY)
-emotion_template = PromptTemplate(template=base_strategy_template, input_variables=[ "input"])
-
-logging.info(emotion_template)
-output_parser = StrOutputParser()
-emotion_chain = emotion_template | llm | output_parser
+# base_strategy = replacer.replace_dict_placeholders(BASE_STRATEGY_PROMPT, config)
+# base_strategy_template = base_strategy.replace("{answer_tendency}", EMOTION_STRATEGY)
+# emotion_template = PromptTemplate(template=base_strategy_template, input_variables=[ "input"])
+#
+# logging.info(emotion_template)
+# output_parser = StrOutputParser()
+# emotion_chain = emotion_template | llm | output_parser
 
 tools = [
-    EmotionCompanionTool(chain = emotion_chain),
+    EmotionCompanionTool(),
     FactTransformTool(),
     ExpressionTool(),
     InformationTool(),

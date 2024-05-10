@@ -7,7 +7,6 @@ from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnableP
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from app.core.abstract_Agent import AbstractAgent
-from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, DialogueTool
 from utils.placeholder_replacer import PlaceholderReplacer
 
 import logging
@@ -55,6 +54,8 @@ class CharacterAgent(AbstractAgent):
         # 将列表转换为字典
         self.tools_dict = {tool.name: tool for tool in self.tools}
 
+        self.user_input = ""
+
     def set_chain_mapping(self, new_mapping):
         """设置新的 chain_mapping"""
         self.chain_mapping = new_mapping
@@ -93,7 +94,7 @@ class CharacterAgent(AbstractAgent):
                 logging.info(f"找到策略 '{tool_name}', 准备调用其方法...")
 
                 if hasattr(tool_instance, 'strategy'):
-                    response =await tool_instance.strategy(action_input)
+                    response =await tool_instance.strategy(user_input=self.user_input,action_input=action_input)
                     logging.info(f"策略 '{tool_name}' 处理完成。")
                     return  response
 
@@ -155,6 +156,7 @@ class CharacterAgent(AbstractAgent):
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
         output = ""
+        self.user_input = prompt_text
         async for chunk in retriever_chain.astream(prompt_text):
             # print(chunk, flush=True)
             output += chunk
