@@ -19,12 +19,15 @@ class DialogueTool(BaseTool):
         raise NotImplementedError
 
 
+
+
 class EmotionCompanionTool(DialogueTool):
     """情感陪伴策略"""
     name = "情感陪伴"
     description = "识别和理解用户情感状态，并调整语气与内容以适应其情绪变化。灵活调整为积极或安慰性语调。"
     def strategy(self, query: str) -> Callable:
         # 使用 NLP 模型检测查询情感,选择相应的响应策略
+        print("调用情感陪伴策略")
 
         ...
 

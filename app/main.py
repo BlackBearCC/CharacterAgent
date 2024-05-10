@@ -128,7 +128,7 @@ async def main():
     # chain.invoke("我们在哪")
     # print(chain.invoke("我们在哪"))
 
-   await tuji_agent.response("你的冰箱有什么")
+   await tuji_agent.response("我心情不好")
 
 
     # async for chunk in chain.astream("你好啊？"):

@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnableP
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from app.core.abstract_Agent import AbstractAgent
-from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool
+from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, DialogueTool
 from utils.placeholder_replacer import PlaceholderReplacer
 
 import logging
@@ -18,7 +18,7 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
         self.memory = {}
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        self.tools = {}
+        self.tools = tools
 
 
         self.prompt_template = PromptTemplate(template=character_info, input_variables=["classic_scenes", "input"])
@@ -52,6 +52,9 @@ class CharacterAgent(AbstractAgent):
 
         self.chain_mapping = {}
 
+        # 将列表转换为字典
+        self.tools_dict = {tool.name: tool for tool in self.tools}
+
     def set_chain_mapping(self, new_mapping):
         """设置新的 chain_mapping"""
         self.chain_mapping = new_mapping
@@ -71,6 +74,36 @@ class CharacterAgent(AbstractAgent):
             docs = [doc for doc, _ in docs_and_scores]
             # Although docs are calculated, they are not directly used here as per the original logic.
             return self.deep_chain
+
+    def use_tool_by_name(self, action_name: str, action_input: str) -> Any:
+        """
+        根据工具名称调用对应工具的方法，并传入action_input。
+
+        :param action_name: 要调用的工具的名称。
+        :param action_input: 传给工具方法的输入字符串。
+        :return: 工具方法执行后的返回值。
+        """
+
+
+
+        logging.info(f"尝试根据名称 '{action_name}' 调用工具...")
+        for tool_name, tool_instance in self.tools_dict.items():
+            # 假设每个工具类有一个属性 'name' 来标识它
+            if hasattr(tool_instance, 'name') and tool_instance.name == action_name:
+                logging.info(f"找到工具 '{tool_name}', 准备调用其方法...")
+
+                if hasattr(tool_instance, 'strategy'):
+                    response = tool_instance.strategy(action_input)
+                    logging.info(f"工具 '{tool_name}' 处理完成。")
+                    return response
+
+                else:
+                    logging.warning(f"工具 '{tool_name}' 缺少预期的处理方法。")
+                    break
+        else:
+            logging.warning(f"未找到名为 '{action_name}' 的工具。")
+
+        return None  # 如果没有找到匹配的工具或方法，则返回None或其他默认值
 
     async def route_post_deep_chain(self, deep_chain_output):
         """
@@ -96,17 +129,21 @@ class CharacterAgent(AbstractAgent):
 
 
             logging.info("Agent Use Chain: %s", action_name)
+            self.use_tool_by_name(action_name=action_name,action_input="你好啊啊啊啊")
 
 
 
-            selected_chain = self.chain_mapping.get(action_name)
-            if selected_chain:
-                logging.info(selected_chain)
-                return selected_chain
-            else:
-                logging.info("No matching chain found.")
+            # if action_name in self.tools:
+            #     logging.info("Agent Use Chain: %s", action_name)
 
-            return None
+            # selected_chain = self.chain_mapping.get(action_name)
+            # if selected_chain:
+            #     logging.info(selected_chain)
+            #     return selected_chain
+            # else:
+            #     logging.info("No matching chain found.")
+            #
+            # return None
 
         except Exception as e:
             logging.error("处理 route_post_deep_chain 时发生异常: %s", str(e))
