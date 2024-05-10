@@ -75,7 +75,7 @@ class CharacterAgent(AbstractAgent):
             # Although docs are calculated, they are not directly used here as per the original logic.
             return self.deep_chain
 
-    def use_tool_by_name(self, action_name: str, action_input: str) -> Any:
+    async def use_tool_by_name(self, action_name: str, action_input: str) -> Any:
         """
         根据工具名称调用对应工具的方法，并传入action_input。
 
@@ -86,22 +86,22 @@ class CharacterAgent(AbstractAgent):
 
 
 
-        logging.info(f"尝试根据名称 '{action_name}' 调用工具...")
+        logging.info(f"尝试根据名称 '{action_name}' 调用策略...")
         for tool_name, tool_instance in self.tools_dict.items():
             # 假设每个工具类有一个属性 'name' 来标识它
             if hasattr(tool_instance, 'name') and tool_instance.name == action_name:
-                logging.info(f"找到工具 '{tool_name}', 准备调用其方法...")
+                logging.info(f"找到策略 '{tool_name}', 准备调用其方法...")
 
                 if hasattr(tool_instance, 'strategy'):
-                    response = tool_instance.strategy(action_input)
-                    logging.info(f"工具 '{tool_name}' 处理完成。")
-                    return response
+                    response =await tool_instance.strategy(action_input)
+                    logging.info(f"策略 '{tool_name}' 处理完成。")
+                    return  response
 
                 else:
-                    logging.warning(f"工具 '{tool_name}' 缺少预期的处理方法。")
+                    logging.warning(f"策略 '{tool_name}' 缺少预期的处理方法。")
                     break
         else:
-            logging.warning(f"未找到名为 '{action_name}' 的工具。")
+            logging.warning(f"未找到名为 '{action_name}' 的策略。")
 
         return None  # 如果没有找到匹配的工具或方法，则返回None或其他默认值
 
@@ -117,7 +117,10 @@ class CharacterAgent(AbstractAgent):
         """
 
         try:
+            #暂时写死，json格式，计划根据prompt动态处理
             action_name = deep_chain_output.get("action")
+            action_input = deep_chain_output.get("input")
+
             if action_name is None:
                 logging.info("action_name 为空,无策略调用")
                 return None
@@ -129,7 +132,7 @@ class CharacterAgent(AbstractAgent):
 
 
             logging.info("Agent Use Chain: %s", action_name)
-            self.use_tool_by_name(action_name=action_name,action_input="你好啊啊啊啊")
+            await self.use_tool_by_name(action_name=action_name,action_input=action_input)
 
 
 

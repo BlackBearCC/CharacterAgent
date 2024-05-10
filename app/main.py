@@ -1,6 +1,7 @@
 # main.py
 import asyncio
 import json
+import logging
 import re
 
 from fastapi import FastAPI
@@ -22,6 +23,8 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough, Runn
 
 from ai.models import QianwenModel
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
+from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
+from ai.prompts.emotion_strategy import EMOTION_STRATEGY
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
@@ -30,7 +33,7 @@ from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool
     OpinionTool, DefenseTool, RepeatTool, TopicTool
 from utils.document_processing_tool import DocumentProcessingTool
 from utils.placeholder_replacer import PlaceholderReplacer
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = FastAPI()
 
 
@@ -54,8 +57,16 @@ llm = Tongyi(model_name="qwen-turbo", top_p=0.7, dashscope_api_key="sk-dc356b8ca
 document_util = DocumentProcessingTool("../ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = document_util.process_and_build_vector_db()
 
+base_strategy = replacer.replace_dict_placeholders(BASE_STRATEGY_PROMPT, config)
+base_strategy_template = base_strategy.replace("{answer_tendency}", EMOTION_STRATEGY)
+emotion_template = PromptTemplate(template=base_strategy_template, input_variables=[ "input"])
+
+logging.info(emotion_template)
+output_parser = StrOutputParser()
+emotion_chain = emotion_template | llm | output_parser
+
 tools = [
-    EmotionCompanionTool(),
+    EmotionCompanionTool(chain = emotion_chain),
     FactTransformTool(),
     ExpressionTool(),
     InformationTool(),

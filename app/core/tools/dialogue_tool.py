@@ -1,7 +1,14 @@
+import logging
+
 from langchain.tools import BaseTool
-from typing import Callable
+from typing import Callable, Dict
 import random
 
+from langchain_core.runnables import RunnableSerializable
+
+from ai.prompts.emotion_strategy import EMOTION_STRATEGY
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class DialogueTool(BaseTool):
     """基类,实现对话策略的调用逻辑"""
@@ -25,11 +32,16 @@ class EmotionCompanionTool(DialogueTool):
     """情感陪伴策略"""
     name = "情感陪伴"
     description = "识别和理解用户情感状态，并调整语气与内容以适应其情绪变化。灵活调整为积极或安慰性语调。"
-    def strategy(self, query: str) -> Callable:
-        # 使用 NLP 模型检测查询情感,选择相应的响应策略
-        print("调用情感陪伴策略")
+    chain: RunnableSerializable[Dict, str]
 
-        ...
+    async def strategy(self, query: str) -> Callable:
+        # 使用 NLP 模型检测查询情感,选择相应的响应策略
+        async for chunk in self.chain.astream({ "input": query}):
+
+            print(chunk, end="|", flush=True)
+        logging.info(f"策略 '{self.name}'接受信息: '{query}' 。")
+
+
 
 
 class FactTransformTool(DialogueTool):
