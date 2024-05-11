@@ -2,6 +2,7 @@ import inspect
 import json
 from typing import Any, Dict, List, AsyncGenerator
 
+from langchain.memory import ConversationBufferMemory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
@@ -58,9 +59,9 @@ class CharacterAgent(AbstractAgent):
 
         self.user_input = ""
 
-    def set_chain_mapping(self, new_mapping):
-        """设置新的 chain_mapping"""
-        self.chain_mapping = new_mapping
+
+
+
 
     async def rute_retriever(self, query):
         docs_and_scores = self.document_util.vectordb.similarity_search_with_score(query)
@@ -108,8 +109,7 @@ class CharacterAgent(AbstractAgent):
                     #         chunks.append(chunk)
                     #     return ''.join(chunks)
 
-                        # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-
+                    # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
                     response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         # response = await collect_chunks(response_gen)

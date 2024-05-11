@@ -5,8 +5,7 @@ from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 
 BASE_STRATEGY_PROMPT = BASE_CHARACTER_PROMPT+"""
 
-
-
+历史记录：{history}
 回答倾向：{answer_tendency}
 关键内容：{action_input}
 上文给定了历史记录和你现在的回答倾向和关键内容帮助你回答。

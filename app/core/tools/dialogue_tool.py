@@ -1,8 +1,9 @@
 import json
 import logging
 
+from langchain.memory import ConversationBufferMemory
 from langchain.tools import BaseTool
-from typing import Callable, Dict
+from typing import Callable, Dict, Any
 import random
 
 from langchain_community.llms.tongyi import Tongyi
@@ -19,6 +20,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class DialogueTool(BaseTool):
     """基类,实现对话策略的调用逻辑"""
+
 
     async def _run(self, query: str, run_manager=None) -> str:
         strategy_func = self.strategy(query)
@@ -40,18 +42,24 @@ class DialogueTool(BaseTool):
 def _init_chain(strategy_name):
     """初始化对话策略"""
     llm = Tongyi(model_name="qwen-turbo", top_p=0.5, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+    # 创建对话历史记录内存对象
+    memory = ConversationBufferMemory(human_prefix="Human",ai_prefix="Assistant")
+
+
     replacer = PlaceholderReplacer()
     # 加载JSON配置文件
     with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     base_strategy = replacer.replace_dict_placeholders(BASE_STRATEGY_PROMPT, config)
+    # base_strategy_with_history = base_strategy.replace("{history}", history)
     base_strategy_template = base_strategy.replace("{answer_tendency}", strategy_name)
+
     emotion_template = PromptTemplate(template=base_strategy_template, input_variables=["action_input","input"])
 
     logging.info(emotion_template)
     output_parser = StrOutputParser()
     emotion_chain = emotion_template | llm | output_parser
-    return emotion_chain
+    return emotion_chain, memory
 
 
 class EmotionCompanionTool(DialogueTool):
@@ -62,11 +70,24 @@ class EmotionCompanionTool(DialogueTool):
         "灵活调整为积极或安慰性语调。"
     )
     chain = _init_chain(EMOTION_STRATEGY)
+    memory: ConversationBufferMemory = None
+
+
+    def __init__(self):
+        super().__init__()
+        self.chain, self.memory = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
+        self.memory.chat_memory.add_user_message(user_input)
+        # 获取当前对话历史记录
+
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": self.memory.chat_memory.messages}):
+            # 将工具输出存储到历史记录中
+            self.memory.chat_memory.add_ai_message(chunk)
             yield chunk
             # print(chunk, end="|", flush=True)
+        logging.info(self.memory.chat_memory.messages)
+
 
 
 
@@ -77,8 +98,11 @@ class FactTransformTool(DialogueTool):
     chain = _init_chain(FACT_TRANSFORM_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
-            print(chunk, end="|", flush=True)
+
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
+            yield chunk
+
+
 
 
 
@@ -89,7 +113,7 @@ class ExpressionTool(DialogueTool):
     chain = _init_chain(EXPRESSION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
             yield chunk
             # print(chunk, end="|", flush=True)
 
@@ -102,8 +126,8 @@ class InformationTool(DialogueTool):
     chain = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
-            print(chunk, end="|", flush=True)
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
+            yield chunk
 
 
 
@@ -115,8 +139,8 @@ class OpinionTool(DialogueTool):
     chain = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": input}):
-            print(chunk, end="|", flush=True)
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
+            yield chunk
 
 
 
@@ -127,8 +151,8 @@ class DefenseTool(DialogueTool):
     chain = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": input}):
-            print(chunk, end="|", flush=True)
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
+            yield chunk
 
 
 
@@ -139,8 +163,8 @@ class RepeatTool(DialogueTool):
     chain = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": input}):
-            print(chunk, end="|", flush=True)
+        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
+            yield chunk
 
 
 
@@ -151,6 +175,6 @@ class TopicTool(DialogueTool):
     chain = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": input}):
-            print(chunk, end="|", flush=True)
+        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
+            yield chunk
 

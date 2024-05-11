@@ -103,61 +103,6 @@ tools = [
 ]
 tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools)
 
-
-# # 定义角色描述
-# role = "你是一位名叫Alice的AI助手,扮演一位善良、乐于助人的女仆角色。你必须坚持角色设定,不能违背女仆的身份和性格特征。"
-
-
-
-# # 定义工具描述
-# tools_desc = """现在，你已经有了一个角色，接下来，你需要用该角色的思维方式，按以下流程调用工具。
-# ##回复流程
-# EXTRACT：提取上下文关键信息。
-# THOUGHT：分析并结合当前情境、状态、事件、记忆，优先考虑角色需求与情绪，并综合考虑用户状态与外部信息。
-# ACTION：选择合适对话策略，should be one of [{tool_names}]\n\
-#
-#
-#
-# {tools}
-# Thought: {agent_scratchpad}
-# """
-#
-# tools_desc += "\n\n".join([f"{tool.name}: {tool.description}" for tool in tool_instances])
-
-# 定义如何调用工具
-tool_usage = """
-##直接使用json格式输出你调用的策略和传给该策略的关键信息词组，不输出任何其他内容和完整自然语言。
-使用以下格式来调用工具:
-```json
-{{"action": "tool_name", "action_input": "..."}}
-如果你不需要工具,直接给出最终答案:
-{{"action": "final_answer", "action_input": "..."}}
-
-Example:
-输入：我心情不好
-输出：
-{{
-    "action": "情感陪伴",
-    "action_input": "积极/开心/遇到事情"// Only reply with keywords, do not provide a full answer
-}}
-End.
-
-开始：
-"""
-
-# system_message = f"{role}\n\n{tools_desc}\n\n{tool_usage}"
-# system_prompt = SystemMessagePromptTemplate.from_template(system_message)
-# ##定义人类输入提示模板
-# human_template = HumanMessagePromptTemplate.from_template("{input}")
-
-
-# prompt = ChatPromptTemplate.from_messages([system_prompt, human_template])
-
-# memory = ConversationBufferMemory()
-
-
-
-
 async def main():
     # await tuji_agent.response_stream(prompt_text)
     # await tuji_agent.response_stream_with_retriever(prompt_text,retriever)
@@ -165,7 +110,7 @@ async def main():
     # chain.invoke("我们在哪")
     # print(chain.invoke("我们在哪"))
 
-   await tuji_agent.response("你饿不饿")
+   await tuji_agent.response("我的心情很不好")
 
 
     # async for chunk in chain.astream("你好啊？"):
