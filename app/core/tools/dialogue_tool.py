@@ -11,7 +11,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSerializable
 
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
-from ai.prompts.emotion_strategy import EMOTION_STRATEGY
+from ai.prompts.default_strategy import EMOTION_STRATEGY, FACT_TRANSFORM_STRATEGY, EXPRESSION_STRATEGY
 from utils.placeholder_replacer import PlaceholderReplacer
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,13 +20,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class DialogueTool(BaseTool):
     """基类,实现对话策略的调用逻辑"""
 
-    def _run(self, query: str, run_manager=None) -> str:
-        """使用合适的策略处理查询,返回响应"""
+    async def _run(self, query: str, run_manager=None) -> str:
         strategy_func = self.strategy(query)
         if strategy_func is None:
             return "无法确定适当的对话策略。"
-        else:
-            return strategy_func()
+
+        async def consume_generator():
+            async for chunk in strategy_func():
+                pass  # 处理每个生成的 chunk
+
+        await consume_generator()
+        return "处理完成"
 
     def strategy(self, user_input: str, action_input: str) -> Callable:
         """根据查询内容选择合适的策略"""
@@ -35,7 +39,7 @@ class DialogueTool(BaseTool):
 
 def _init_chain(strategy_name):
     """初始化对话策略"""
-    llm = Tongyi(model_name="qwen-turbo", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+    llm = Tongyi(model_name="qwen-turbo", top_p=0.5, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
     replacer = PlaceholderReplacer()
     # 加载JSON配置文件
     with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
@@ -61,32 +65,34 @@ class EmotionCompanionTool(DialogueTool):
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
         async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
-            print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+            yield chunk
+            # print(chunk, end="|", flush=True)
+
 
 
 class FactTransformTool(DialogueTool):
     """事实转换策略"""
     name = "事实转换"
-    description = "以角色视角将现实信息转化为你眼中的对应物。保持信息核心意义，避免歪曲。"
-    chain = _init_chain(EMOTION_STRATEGY)
+    description = "以角色视角将现实信息（著名人物/地点/事件/物品等）转化为你眼中的对应物。保持信息核心意义，避免歪曲。"
+    chain = _init_chain(FACT_TRANSFORM_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": input}):
+        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
             print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+
 
 
 class ExpressionTool(DialogueTool):
     """表达诉求策略"""
     name = "表达诉求"
     description = "表达角色需求，生理、安全，再社交、尊重，最后自我实现。确保表达明确且符合角色性格。"
-    chain = _init_chain(EMOTION_STRATEGY)
+    chain = _init_chain(EXPRESSION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": input}):
-            print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
+            yield chunk
+            # print(chunk, end="|", flush=True)
+
 
 
 class InformationTool(DialogueTool):
@@ -96,9 +102,9 @@ class InformationTool(DialogueTool):
     chain = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self, user_input: str, action_input: str) -> Callable:
-        async for chunk in self.chain.astream({"input": input}):
+        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input}):
             print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+
 
 
 class OpinionTool(DialogueTool):
@@ -111,7 +117,7 @@ class OpinionTool(DialogueTool):
     async def strategy(self, user_input: str, action_input: str) -> Callable:
         async for chunk in self.chain.astream({"input": input}):
             print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+
 
 
 class DefenseTool(DialogueTool):
@@ -123,7 +129,7 @@ class DefenseTool(DialogueTool):
     async def strategy(self, user_input: str, action_input: str) -> Callable:
         async for chunk in self.chain.astream({"input": input}):
             print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+
 
 
 class RepeatTool(DialogueTool):
@@ -135,7 +141,7 @@ class RepeatTool(DialogueTool):
     async def strategy(self, user_input: str, action_input: str) -> Callable:
         async for chunk in self.chain.astream({"input": input}):
             print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+
 
 
 class TopicTool(DialogueTool):
@@ -147,4 +153,4 @@ class TopicTool(DialogueTool):
     async def strategy(self, user_input: str, action_input: str) -> Callable:
         async for chunk in self.chain.astream({"input": input}):
             print(chunk, end="|", flush=True)
-        logging.info(f"策略 '{self.name}'接受信息: '{input}' 。")
+

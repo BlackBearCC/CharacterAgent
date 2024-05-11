@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import re
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI
 from langchain.agents import initialize_agent, AgentOutputParser, AgentExecutor, create_react_agent
@@ -24,7 +25,7 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough, Runn
 from ai.models import QianwenModel
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
-from ai.prompts.emotion_strategy import EMOTION_STRATEGY
+from ai.prompts.default_strategy import EMOTION_STRATEGY
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
@@ -33,8 +34,33 @@ from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool
     OpinionTool, DefenseTool, RepeatTool, TopicTool
 from utils.document_processing_tool import DocumentProcessingTool
 from utils.placeholder_replacer import PlaceholderReplacer
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 app = FastAPI()
+
+# 创建一个日志处理器
+class SSLFilter(logging.Filter):
+    def filter(self, record):
+        message = record.getMessage()
+        if 'SSLError' in message:
+            return False
+        return True
+
+# 设置日志基本配置
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[RotatingFileHandler('app.log', maxBytes=10000, backupCount=5)]
+)
+
+# 配置requests的日志级别
+requests_log = logging.getLogger("requests")
+requests_log.setLevel(logging.CRITICAL)
+
+# 创建一个过滤器，用于过滤特定的日志
+handler = logging.root.handlers[0]
+handler.addFilter(SSLFilter())
+
 
 
 model = QianwenModel()
@@ -139,7 +165,7 @@ async def main():
     # chain.invoke("我们在哪")
     # print(chain.invoke("我们在哪"))
 
-   await tuji_agent.response("我心情不好")
+   await tuji_agent.response("你饿不饿")
 
 
     # async for chunk in chain.astream("你好啊？"):
