@@ -101,24 +101,25 @@ class CharacterAgent(AbstractAgent):
                 # 处理异步生成器，注意需要strategy返回的是异步生成器而不是string，否则无法在外部流式返回网络请求结果
                 if hasattr(tool_instance, 'strategy'):
                     # 异步收集生成器产生的块，并将其拼接成字符串
-                    async def collect_chunks(strategy_coro):
-                        chunks = []
-                        async for chunk in strategy_coro:
-                            print(chunk, end="|", flush=True)
-                            chunks.append(chunk)
-                        return ''.join(chunks)
+                    # async def collect_chunks(strategy_coro):
+                    #     chunks = []
+                    #     async for chunk in strategy_coro:
+                    #         # print(chunk, end="|", flush=True)
+                    #         chunks.append(chunk)
+                    #     return ''.join(chunks)
 
                         # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
 
                     response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
-                        response = await collect_chunks(response_gen)
+                        # response = await collect_chunks(response_gen)
+                        return response_gen
                     else:
                         response = await response_gen  # 直接等待协程结果
 
                     # 记录策略处理完成
                     logging.info(f"策略 '{tool_name}' 处理完成。")
-                    return response
+                    return response_gen
 
                 else:
                     # 如果找到工具但缺少预期的方法，记录警告信息
@@ -155,7 +156,7 @@ class CharacterAgent(AbstractAgent):
             return None
 
         logging.info("Agent Use Chain: %s", action_name)
-        await self.use_tool_by_name(action_name=action_name, action_input=action_input)
+        return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
         # if action_name in self.tools:
             #     logging.info("Agent Use Chain: %s", action_name)
@@ -183,7 +184,13 @@ class CharacterAgent(AbstractAgent):
             # 将输出解析为 JSON 对象
             json_output = json.loads(output)
             print("\nValid JSON output:", json_output)
-            await self.route_post_deep_chain(json_output)
+            # 使用await等待协程执行并获取异步生成器
+            response_generator = await self.route_post_deep_chain(json_output)
+
+            # 使用异步生成器
+            async for chunk in response_generator:
+                print(f"策略响应: {chunk}", flush=True)
+
         except json.JSONDecodeError:
             print("\nInvalid JSON output")
 
