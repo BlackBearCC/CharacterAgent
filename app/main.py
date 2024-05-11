@@ -109,8 +109,15 @@ async def main():
 
     # chain.invoke("我们在哪")
     # print(chain.invoke("我们在哪"))
+    # 创建对话历史记录内存对象
+    memory = ConversationBufferMemory(human_prefix="大头哥哥", ai_prefix="兔几妹妹")
+    while True:
+        user_input = input("请输入你的消息：")
+        if user_input.lower() == "退出":
+            break
+        await tuji_agent.response(user_input,memory)
+        logging.info("当前对话历史记录："+memory.buffer)
 
-   await tuji_agent.response("我的心情很不好")
 
 
     # async for chunk in chain.astream("你好啊？"):

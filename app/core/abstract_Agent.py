@@ -1,12 +1,15 @@
 from abc import ABC, abstractmethod
 
+from langchain.memory import ConversationBufferMemory
+
+
 class AbstractAgent(ABC):
     """
     抽象代理类，定义了一个代理的基本行为。
     """
 
     @abstractmethod
-    def response(self, input_text: str) -> str:
+    def response(self, input_text: str, memory:ConversationBufferMemory) -> str:
         """
         处理来自用户的输入，并生成相应的响应。
 

@@ -34,7 +34,7 @@ class DialogueTool(BaseTool):
         await consume_generator()
         return "处理完成"
 
-    def strategy(self, user_input: str, action_input: str) -> Callable:
+    def strategy(self, user_input: str, action_input: str,memory:ConversationBufferMemory) -> Callable:
         """根据查询内容选择合适的策略"""
         raise NotImplementedError
 
@@ -42,8 +42,7 @@ class DialogueTool(BaseTool):
 def _init_chain(strategy_name):
     """初始化对话策略"""
     llm = Tongyi(model_name="qwen-turbo", top_p=0.5, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
-    # 创建对话历史记录内存对象
-    memory = ConversationBufferMemory(human_prefix="Human",ai_prefix="Assistant")
+
 
 
     replacer = PlaceholderReplacer()
@@ -57,9 +56,10 @@ def _init_chain(strategy_name):
     emotion_template = PromptTemplate(template=base_strategy_template, input_variables=["action_input","input"])
 
     logging.info(emotion_template)
+
     output_parser = StrOutputParser()
     emotion_chain = emotion_template | llm | output_parser
-    return emotion_chain, memory
+    return emotion_chain
 
 
 class EmotionCompanionTool(DialogueTool):
@@ -70,23 +70,25 @@ class EmotionCompanionTool(DialogueTool):
         "灵活调整为积极或安慰性语调。"
     )
     chain = _init_chain(EMOTION_STRATEGY)
-    memory: ConversationBufferMemory = None
+    # memory: ConversationBufferMemory = None
 
 
     def __init__(self):
         super().__init__()
-        self.chain, self.memory = _init_chain(EMOTION_STRATEGY)
+        self.chain = _init_chain(EMOTION_STRATEGY)
 
-    async def strategy(self, user_input: str, action_input: str) -> Callable:
-        self.memory.chat_memory.add_user_message(user_input)
+    async def strategy(self, user_input: str, action_input: str,memory: ConversationBufferMemory) -> Callable:
+        # memory.chat_memory.add_user_message(user_input)
         # 获取当前对话历史记录
+        final_result = ""
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": memory}):
+            final_result += chunk
 
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": self.memory.chat_memory.messages}):
-            # 将工具输出存储到历史记录中
-            self.memory.chat_memory.add_ai_message(chunk)
             yield chunk
             # print(chunk, end="|", flush=True)
-        logging.info(self.memory.chat_memory.messages)
+            # 将工具输出存储到历史记录中
+        # memory.chat_memory.add_ai_message(final_result)
+        # logging.info("储存聊天记录："+ f"{self.memory.chat_memory.messages}")
 
 
 

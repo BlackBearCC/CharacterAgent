@@ -28,7 +28,7 @@ class CharacterAgent(AbstractAgent):
         self.retriever = retriever
         self.document_util = document_util
         self.llm = llm
-        self.similarity_threshold = 0.1
+        self.similarity_threshold = 0.3
 
         # Setup chains
         self.setup_and_retrieval = RunnableParallel({"classic_scenes": retriever, "input": RunnablePassthrough()})
@@ -58,6 +58,7 @@ class CharacterAgent(AbstractAgent):
         self.tools_dict = {tool.name: tool for tool in self.tools}
 
         self.user_input = ""
+        self.memory = None
 
 
 
@@ -110,7 +111,7 @@ class CharacterAgent(AbstractAgent):
                     #     return ''.join(chunks)
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-                    response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input)
+                    response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input, memory=self.memory)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         # response = await collect_chunks(response_gen)
                         return response_gen
@@ -171,26 +172,32 @@ class CharacterAgent(AbstractAgent):
             # return None
 
 
-    async def response(self, prompt_text):
+    async def response(self, prompt_text,memory):
+
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
-        output = ""
+        final_output = ""
         self.user_input = prompt_text
+        self.memory = memory
+
+        self.memory.chat_memory.add_user_message(prompt_text)
         async for chunk in retriever_chain.astream(prompt_text):
-            # print(chunk, flush=True)
-            output += chunk
-            print("output:", output)
+            final_output += chunk
+            print(chunk, end="|", flush=True)
+        self.memory.chat_memory.add_ai_message(final_output)
         try:
+
             # 将输出解析为 JSON 对象
-            json_output = json.loads(output)
+            json_output = json.loads(final_output)
             print("\nValid JSON output:", json_output)
+            thought_step = ""
             # 使用await等待协程执行并获取异步生成器
             response_generator = await self.route_post_deep_chain(json_output)
-
             # 使用异步生成器
             async for chunk in response_generator:
+                thought_step += chunk
                 print(f"策略响应: {chunk}", flush=True)
-
+            self.memory.chat_memory.add_ai_message(thought_step)
         except json.JSONDecodeError:
             print("\nInvalid JSON output")
 
