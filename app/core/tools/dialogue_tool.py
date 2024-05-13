@@ -99,11 +99,14 @@ class FactTransformTool(DialogueTool):
     description = "以角色视角将现实信息（著名人物/地点/事件/物品等）转化为你眼中的对应物。保持信息核心意义，避免歪曲。"
     chain = _init_chain(FACT_TRANSFORM_STRATEGY)
 
-    async def strategy(self, user_input: str, action_input: str) -> Callable:
+    async def strategy(self, user_input: str, action_input: str, memory: ConversationBufferMemory) -> Callable:
+        # memory.chat_memory.add_user_message(user_input)
+        # 获取当前对话历史记录
+        final_result = ""
+        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input, "history": memory}):
+            final_result += chunk
 
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input}):
             yield chunk
-
 
 
 
