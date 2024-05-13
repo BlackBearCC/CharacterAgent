@@ -41,7 +41,7 @@ class DialogueTool(BaseTool):
 
 def _init_chain(strategy_name):
     """初始化对话策略"""
-    llm = Tongyi(model_name="qwen-turbo", top_p=0.5, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+    llm = Tongyi(model_name="qwen-turbo", top_p=0.3, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
 
 

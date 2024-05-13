@@ -75,7 +75,7 @@ tuji_info = replacer.replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
 print(tuji_info)
 
 # 初始化通义模型
-llm = Tongyi(model_name="qwen-turbo", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
 
 
