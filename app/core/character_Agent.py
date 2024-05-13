@@ -102,18 +102,10 @@ class CharacterAgent(AbstractAgent):
                 # 检查工具实例是否具有预期的处理方法
                 # 处理异步生成器，注意需要strategy返回的是异步生成器而不是string，否则无法在外部流式返回网络请求结果
                 if hasattr(tool_instance, 'strategy'):
-                    # 异步收集生成器产生的块，并将其拼接成字符串
-                    # async def collect_chunks(strategy_coro):
-                    #     chunks = []
-                    #     async for chunk in strategy_coro:
-                    #         # print(chunk, end="|", flush=True)
-                    #         chunks.append(chunk)
-                    #     return ''.join(chunks)
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
                     response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input, memory=self.memory)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
-                        # response = await collect_chunks(response_gen)
                         return response_gen
                     else:
                         response = await response_gen  # 直接等待协程结果
@@ -159,18 +151,6 @@ class CharacterAgent(AbstractAgent):
         logging.info("Agent Use Chain: %s", action_name)
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
-        # if action_name in self.tools:
-            #     logging.info("Agent Use Chain: %s", action_name)
-
-            # selected_chain = self.chain_mapping.get(action_name)
-            # if selected_chain:
-            #     logging.info(selected_chain)
-            #     return selected_chain
-            # else:
-            #     logging.info("No matching chain found.")
-            #
-            # return None
-
 
     async def response(self, prompt_text,memory):
 
@@ -202,26 +182,6 @@ class CharacterAgent(AbstractAgent):
             print("\nInvalid JSON output")
 
 
-        #
-        # # 检查 JSON 对象中是否包含指定的关键字
-        # if "story" in json_output.get("result", "").lower():
-        #     post_deep_chain_output = await self.story_chain.arun(json_output)
-        #     print(f"\nPost Deep Chain Output: {post_deep_chain_output}")
-        # elif "poem" in json_output.get("result", "").lower():
-        #     post_deep_chain_output = await self.poem_chain.arun(json_output)
-        #     print(f"\nPost Deep Chain Output: {post_deep_chain_output}")
-        # else:
-        #     print("\nNo additional chain to run.")
-
-
-
-    # async def response_stream(self,input_text: str):
-    #     async for chunk in self.model.astream_with_langchain(input_text):
-    #         print(chunk, end="|", flush=True)
-    #
-    # async def response_stream_with_retriever(self,input_text: str, retriever):
-    #     async for chunk in self.model.astream_with_langchain_RAG(retriever,input_text):
-    #         print(chunk, end="|", flush=True)
     def perform_task(self, task: str, data: dict) -> int:
         return 200
 

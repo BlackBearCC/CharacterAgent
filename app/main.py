@@ -104,11 +104,8 @@ tools = [
 tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools)
 
 async def main():
-    # await tuji_agent.response_stream(prompt_text)
-    # await tuji_agent.response_stream_with_retriever(prompt_text,retriever)
 
-    # chain.invoke("我们在哪")
-    # print(chain.invoke("我们在哪"))
+
     # 创建对话历史记录内存对象
     memory = ConversationBufferMemory(human_prefix="大头哥哥", ai_prefix="兔几妹妹")
     while True:
@@ -117,7 +114,6 @@ async def main():
             break
         await tuji_agent.response(user_input,memory)
         logging.info("当前对话历史记录："+memory.buffer)
-
 
 
     # async for chunk in chain.astream("你好啊？"):
