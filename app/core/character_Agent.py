@@ -2,7 +2,8 @@ import inspect
 import json
 from typing import Any, Dict, List, AsyncGenerator
 
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferMemory, ConversationStringBufferMemory
+from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
@@ -17,7 +18,7 @@ class CharacterAgent(AbstractAgent):
     def __init__(self, character_info: str,retriever, document_util, llm,tools):
         self.character_info = character_info
         self.llm = llm
-        self.memory = {}
+
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
         self.tools = tools
@@ -58,7 +59,7 @@ class CharacterAgent(AbstractAgent):
         self.tools_dict = {tool.name: tool for tool in self.tools}
 
         self.user_input = ""
-        self.memory = None
+        self.memory:BaseChatMessageHistory = None
 
 
 
@@ -152,19 +153,20 @@ class CharacterAgent(AbstractAgent):
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
 
-    async def response(self, prompt_text,memory):
+    async def response(self, prompt_text:str,memory:BaseChatMessageHistory):
 
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
         final_output = ""
         self.user_input = prompt_text
         self.memory = memory
+        messages = []
 
-        self.memory.chat_memory.add_user_message(prompt_text)
+        self.memory.add_user_message(prompt_text)
         async for chunk in retriever_chain.astream(prompt_text):
             final_output += chunk
             print(chunk, end="|", flush=True)
-        self.memory.chat_memory.add_ai_message(final_output)
+        self.memory.add_ai_message(final_output)
         try:
 
             # 将输出解析为 JSON 对象
@@ -177,7 +179,7 @@ class CharacterAgent(AbstractAgent):
             async for chunk in response_generator:
                 thought_step += chunk
                 print(f"策略响应: {chunk}", flush=True)
-            self.memory.chat_memory.add_ai_message(thought_step)
+            self.memory.add_ai_message(thought_step)
         except json.JSONDecodeError:
             print("\nInvalid JSON output")
 

@@ -8,5 +8,12 @@
       <jdbc-url>jdbc:mysql://182.254.242.30:3306/db_gamechat</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
+    <data-source source="LOCAL" name="db_role_agent" uuid="ee2a7f3a-d3d5-4000-9562-2c169b133693">
+      <driver-ref>mysql.8</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
+      <jdbc-url>jdbc:mysql://182.254.242.30:3306/db_role_agent</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
   </component>
 </project>

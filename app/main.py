@@ -11,6 +11,8 @@ from langchain.chains import LLMChain
 from langchain.memory import ConversationBufferMemory
 from langchain.output_parsers import StructuredOutputParser
 from langchain.text_splitter import CharacterTextSplitter
+
+
 from langchain_community.document_loaders import TextLoader
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_community.llms.tongyi import Tongyi
@@ -23,6 +25,7 @@ import os
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
 
 from ai.models import QianwenModel
+from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY
@@ -91,6 +94,7 @@ retriever = document_util.process_and_build_vector_db()
 # output_parser = StrOutputParser()
 # emotion_chain = emotion_template | llm | output_parser
 
+
 tools = [
     EmotionCompanionTool(),
     FactTransformTool(),
@@ -103,6 +107,10 @@ tools = [
 ]
 tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools)
 
+chat_message_history = SQLChatMessageHistory(
+    session_id="test_session",
+    connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
+)
 async def main():
 
 
@@ -112,8 +120,9 @@ async def main():
         user_input = input("请输入你的消息：")
         if user_input.lower() == "退出":
             break
-        await tuji_agent.response(user_input,memory)
-        logging.info("当前对话历史记录："+memory.buffer)
+        await tuji_agent.response(user_input,chat_message_history)
+        message_strings = [str(message) for message in chat_message_history.messages(3)]
+        logging.info("当前对话历史记录：" + ", ".join(message_strings))
 
 
     # async for chunk in chain.astream("你好啊？"):
