@@ -18,7 +18,7 @@ from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 DEEP_CHARACTER_PROMPT = BASE_CHARACTER_PROMPT+"""
 
 ##历史记录
-{history}
+
 
 现在，你已经有了一个角色和行为历史记录，接下来，你需要用该角色的思维方式，按以下流程调用工具。
 
