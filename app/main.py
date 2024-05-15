@@ -121,8 +121,8 @@ async def main():
         if user_input.lower() == "退出":
             break
         await tuji_agent.response(user_input,chat_message_history)
-        message_strings = [str(message) for message in chat_message_history.messages(3)]
-        logging.info("当前对话历史记录：" + ", ".join(message_strings))
+        # message_strings = [str(message) for message in chat_message_history.messages(20)]
+        # logging.info("当前对话历史记录：" + ", ".join(message_strings))
 
 
     # async for chunk in chain.astream("你好啊？"):

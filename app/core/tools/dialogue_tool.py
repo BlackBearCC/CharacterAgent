@@ -83,7 +83,9 @@ class EmotionCompanionTool(DialogueTool):
 
         # 获取当前对话历史记录
         final_result = ""
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": memory.messages}):
+        history = [msg.content for msg in memory.messages()]
+        print("memory:",history)
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
 
             yield chunk
