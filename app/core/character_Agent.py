@@ -105,7 +105,7 @@ class CharacterAgent(AbstractAgent):
                 if hasattr(tool_instance, 'strategy'):
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-                    response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input, memory=self.memory)
+                    response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input,memory = self.memory)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         return response_gen
                     else:

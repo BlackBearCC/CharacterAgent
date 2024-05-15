@@ -115,7 +115,7 @@ async def main():
 
 
     # 创建对话历史记录内存对象
-    memory = ConversationBufferMemory(human_prefix="大头哥哥", ai_prefix="兔几妹妹")
+    memory = ConversationBufferMemory(human_prefix="大头哥", ai_prefix="兔几妹妹")
     while True:
         user_input = input("请输入你的消息：")
         if user_input.lower() == "退出":

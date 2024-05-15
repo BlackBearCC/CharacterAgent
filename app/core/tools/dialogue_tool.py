@@ -7,6 +7,7 @@ from typing import Callable, Dict, Any
 import random
 
 from langchain_community.llms.tongyi import Tongyi
+from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSerializable
@@ -77,11 +78,12 @@ class EmotionCompanionTool(DialogueTool):
         super().__init__()
         self.chain = _init_chain(EMOTION_STRATEGY)
 
-    async def strategy(self, user_input: str, action_input: str,memory: ConversationBufferMemory) -> Callable:
+    async def strategy(self, user_input: str, action_input: str,memory: BaseChatMessageHistory =None) -> Callable:
         # memory.chat_memory.add_user_message(user_input)
+
         # 获取当前对话历史记录
         final_result = ""
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": memory}):
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": memory.messages}):
             final_result += chunk
 
             yield chunk
@@ -99,7 +101,7 @@ class FactTransformTool(DialogueTool):
     description = "以角色视角将现实信息（著名人物/地点/事件/物品等）转化为你眼中的对应物。保持信息核心意义，避免歪曲。"
     chain = _init_chain(FACT_TRANSFORM_STRATEGY)
 
-    async def strategy(self, user_input: str, action_input: str, memory: ConversationBufferMemory) -> Callable:
+    async def strategy(self, user_input: str, action_input: str, memory: BaseChatMessageHistory=None) -> Callable:
         # memory.chat_memory.add_user_message(user_input)
         # 获取当前对话历史记录
         final_result = ""
