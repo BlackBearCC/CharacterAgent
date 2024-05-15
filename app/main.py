@@ -25,6 +25,7 @@ import os
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
 
 from ai.models import QianwenModel
+from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
@@ -105,12 +106,13 @@ tools = [
     RepeatTool(),
     TopicTool(),
 ]
-tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools)
-
 chat_message_history = SQLChatMessageHistory(
     session_id="test_session",
     connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
 )
+tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools)
+
+
 async def main():
 
 
@@ -123,6 +125,7 @@ async def main():
         await tuji_agent.response(user_input,chat_message_history)
         # message_strings = [str(message) for message in chat_message_history.messages(20)]
         # logging.info("当前对话历史记录：" + ", ".join(message_strings))
+    # 获取消息列表
 
 
     # async for chunk in chain.astream("你好啊？"):

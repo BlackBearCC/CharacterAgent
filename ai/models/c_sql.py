@@ -13,7 +13,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import (
     BaseMessage,
     message_to_dict,
-    messages_from_dict,
+    messages_from_dict, HumanMessage, AIMessage,
 )
 from sqlalchemy.orm import sessionmaker
 
@@ -72,7 +72,16 @@ class DefaultMessageConverter(BaseMessageConverter):
         #         text(f"ALTER TABLE {table_name} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"))
 
     def from_sql_model(self, sql_message: Any) -> BaseMessage:
-        return messages_from_dict([json.loads(sql_message.message)])[0]
+
+        message_dict = json.loads(sql_message.message)
+        message_type = message_dict.get("type")
+        content = message_dict.get("data", {}).get("content", "")
+        if message_type == "human":
+            return HumanMessage(content=content)
+        elif message_type == "ai":
+            return AIMessage(content=content)
+        else:
+            return BaseMessage(content=content)
 
     def to_sql_model(self, message: BaseMessage, session_id: str) -> Any:
         return self.model_class(
@@ -143,3 +152,5 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
                 == self.session_id
             ).delete()
             session.commit()
+
+

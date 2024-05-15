@@ -8,6 +8,7 @@ import random
 
 from langchain_community.llms.tongyi import Tongyi
 from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import get_buffer_string
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSerializable
@@ -78,14 +79,13 @@ class EmotionCompanionTool(DialogueTool):
         super().__init__()
         self.chain = _init_chain(EMOTION_STRATEGY)
 
-    async def strategy(self, user_input: str, action_input: str,memory: BaseChatMessageHistory =None) -> Callable:
+    async def strategy(self, user_input: str, action_input: str,strategy_history:str = "") -> Callable:
         # memory.chat_memory.add_user_message(user_input)
 
         # 获取当前对话历史记录
         final_result = ""
-        history = [msg.content for msg in memory.messages()]
-        print("memory:",history)
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
+
+        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": strategy_history}):
             final_result += chunk
 
             yield chunk

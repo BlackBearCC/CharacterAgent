@@ -8,6 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 
+from ai.models.buffer import get_prefixed_buffer_string
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from utils.placeholder_replacer import PlaceholderReplacer
@@ -41,12 +42,16 @@ class CharacterAgent(AbstractAgent):
 
         replacer = PlaceholderReplacer()
 
+        self.history: BaseChatMessageHistory = None
+        self.history_buffer = ""
         # 替换配置占位符
         tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, config)
 
-        # 替换工具占位符
+        # 替换历史占位符
+        tuji_info_with_history = tuji_info.replace("{history}", self.history_buffer)
 
-        final_prompt = replacer.replace_tools_with_details(tuji_info,tools)
+        # 替换工具占位符
+        final_prompt = replacer.replace_tools_with_details(tuji_info_with_history,tools)
         logging.info("==============替换工具后的提示字符串===============\n"+final_prompt)
 
         self.deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
@@ -59,7 +64,8 @@ class CharacterAgent(AbstractAgent):
         self.tools_dict = {tool.name: tool for tool in self.tools}
 
         self.user_input = ""
-        self.memory:BaseChatMessageHistory = None
+
+
 
 
 
@@ -105,7 +111,7 @@ class CharacterAgent(AbstractAgent):
                 if hasattr(tool_instance, 'strategy'):
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-                    response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input,memory = self.memory)
+                    response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         return response_gen
                     else:
@@ -153,20 +159,26 @@ class CharacterAgent(AbstractAgent):
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
 
-    async def response(self, prompt_text:str,memory:BaseChatMessageHistory):
+    async def response(self, prompt_text:str,history:BaseChatMessageHistory):
+
+        # 格式化字符串
+        # self.history_buffer = get_prefixed_buffer_string(history.messages(), human_prefix="爸爸", ai_prefix="妹妹")
+
+
 
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
         final_output = ""
         self.user_input = prompt_text
-        self.memory = memory
-        messages = []
+        self.history = history
 
-        self.memory.add_user_message(prompt_text)
+
+
+        self.history.add_user_message(prompt_text)
         async for chunk in retriever_chain.astream(prompt_text):
             final_output += chunk
             print(chunk, end="|", flush=True)
-        self.memory.add_ai_message(final_output)
+        self.history.add_ai_message(final_output)
         try:
 
             # 将输出解析为 JSON 对象
@@ -179,7 +191,7 @@ class CharacterAgent(AbstractAgent):
             async for chunk in response_generator:
                 thought_step += chunk
                 print(f"策略响应: {chunk}", flush=True)
-            self.memory.add_ai_message(thought_step)
+            self.history.add_ai_message(thought_step)
         except json.JSONDecodeError:
             print("\nInvalid JSON output")
 
