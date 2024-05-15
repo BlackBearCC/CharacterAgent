@@ -16,7 +16,11 @@ From React/COT
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 
 DEEP_CHARACTER_PROMPT = BASE_CHARACTER_PROMPT+"""
-现在，你已经有了一个角色，接下来，你需要用该角色的思维方式，按以下流程调用工具。
+
+##历史记录
+{history}
+
+现在，你已经有了一个角色和行为历史记录，接下来，你需要用该角色的思维方式，按以下流程调用工具。
 
 ##回复流程
 EXTRACT：提取上下文关键信息。
@@ -26,6 +30,8 @@ ACTION：选择合适对话策略。
 ##对话策略
 
 {tools}
+
+
 
 ##直接使用json格式输出你调用的策略和传给该策略的关键信息词组，不输出任何其他内容和完整自然语言。
 

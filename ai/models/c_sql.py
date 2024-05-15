@@ -107,7 +107,7 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
         self.connection_string = connection_string
         self.engine = create_engine(connection_string, echo=False)
         self.session_id_field_name = session_id_field_name
-        self.converter = custom_message_converter or DefaultMessageConverter(table_name)
+        self.converter = DefaultMessageConverter(table_name)
         self.sql_model_class = self.converter.get_sql_model_class()
         if not hasattr(self.sql_model_class, session_id_field_name):
             raise ValueError("SQL model class must have session_id column")

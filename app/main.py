@@ -110,7 +110,9 @@ chat_message_history = SQLChatMessageHistory(
     session_id="test_session",
     connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
 )
-tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools)
+messages = chat_message_history.messages()
+history_buffer = get_prefixed_buffer_string(messages, "大头哥", "兔几妹妹")
+tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history_buffer=history_buffer)
 
 
 async def main():

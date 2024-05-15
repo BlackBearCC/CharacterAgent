@@ -16,7 +16,7 @@ from utils.placeholder_replacer import PlaceholderReplacer
 import logging
 class CharacterAgent(AbstractAgent):
 
-    def __init__(self, character_info: str,retriever, document_util, llm,tools):
+    def __init__(self, character_info: str,retriever, document_util, llm,tools,history_buffer):
         self.character_info = character_info
         self.llm = llm
 
@@ -43,7 +43,7 @@ class CharacterAgent(AbstractAgent):
         replacer = PlaceholderReplacer()
 
         self.history: BaseChatMessageHistory = None
-        self.history_buffer = ""
+        self.history_buffer = history_buffer
         # 替换配置占位符
         tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, config)
 
