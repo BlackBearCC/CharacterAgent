@@ -114,7 +114,7 @@ history_buffer = chat_message_history.buffer()
 
 # history_buffer = get_prefixed_buffer_string(messages, "大头哥", "兔几妹妹")
 # print(history_buffer)
-tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history_buffer=history_buffer)
+tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history=chat_message_history)
 
 
 async def main():
@@ -126,7 +126,7 @@ async def main():
         user_input = input("请输入你的消息：")
         if user_input.lower() == "退出":
             break
-        await tuji_agent.response(user_input,chat_message_history)
+        await tuji_agent.response(user_input)
         # message_strings = [str(message) for message in chat_message_history.messages(20)]
         # logging.info("当前对话历史记录：" + ", ".join(message_strings))
     # 获取消息列表

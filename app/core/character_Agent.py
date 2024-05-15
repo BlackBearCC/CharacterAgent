@@ -9,6 +9,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 
 from ai.models.buffer import get_prefixed_buffer_string
+from ai.models.c_sql import SQLChatMessageHistory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from utils.placeholder_replacer import PlaceholderReplacer
@@ -16,7 +17,7 @@ from utils.placeholder_replacer import PlaceholderReplacer
 import logging
 class CharacterAgent(AbstractAgent):
 
-    def __init__(self, character_info: str,retriever, document_util, llm,tools,history_buffer):
+    def __init__(self, character_info: str,retriever, document_util, llm,tools,history:SQLChatMessageHistory):
         self.character_info = character_info
         self.llm = llm
 
@@ -42,13 +43,13 @@ class CharacterAgent(AbstractAgent):
 
         replacer = PlaceholderReplacer()
 
-        self.history: BaseChatMessageHistory = None
-        self.history_buffer = history_buffer
+        self.history:SQLChatMessageHistory =history
+
         # 替换配置占位符
         tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, config)
 
         # 替换历史占位符
-        tuji_info_with_history = tuji_info.replace("{history}", history_buffer)
+        tuji_info_with_history = tuji_info.replace("{history}", self.history.buffer())
 
         # 替换工具占位符
         final_prompt = replacer.replace_tools_with_details(tuji_info_with_history,tools)
@@ -159,7 +160,7 @@ class CharacterAgent(AbstractAgent):
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
 
-    async def response(self, prompt_text:str,history:BaseChatMessageHistory):
+    async def response(self, prompt_text:str):
 
         # 格式化字符串
         # self.history_buffer = get_prefixed_buffer_string(history.messages(), human_prefix="爸爸", ai_prefix="妹妹")
@@ -170,7 +171,7 @@ class CharacterAgent(AbstractAgent):
         retriever_chain = retriever_lambda
         final_output = ""
         self.user_input = prompt_text
-        self.history = history
+
 
 
 
