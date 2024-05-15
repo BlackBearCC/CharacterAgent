@@ -5,6 +5,8 @@ from typing import Any, List, Optional
 
 from sqlalchemy import Column, Integer, Text, create_engine, text
 
+from ai.models.buffer import get_prefixed_buffer_string
+
 try:
     from sqlalchemy.orm import declarative_base
 except ImportError:
@@ -137,6 +139,13 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
             for record in result:
                 messages.append(self.converter.from_sql_model(record))
             return messages
+
+    def buffer(self, count: int = 100) -> str:
+        """Retrieve the last 'count' messages from db, sorted by ascending id."""
+        _messages = self.messages(10)
+        history_buffer = get_prefixed_buffer_string(_messages, "大头哥", "兔几妹妹")
+
+        return history_buffer
     def add_message(self, message: BaseMessage) -> None:
         """Append the message to the record in db"""
         with self.Session() as session:

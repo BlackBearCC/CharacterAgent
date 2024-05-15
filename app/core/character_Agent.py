@@ -48,10 +48,10 @@ class CharacterAgent(AbstractAgent):
         tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, config)
 
         # 替换历史占位符
-        # tuji_info_with_history = tuji_info.replace("{history}", self.history_buffer)
+        tuji_info_with_history = tuji_info.replace("{history}", history_buffer)
 
         # 替换工具占位符
-        final_prompt = replacer.replace_tools_with_details(tuji_info,tools)
+        final_prompt = replacer.replace_tools_with_details(tuji_info_with_history,tools)
         logging.info("==============替换工具后的提示字符串===============\n"+final_prompt)
 
         self.deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
@@ -178,7 +178,8 @@ class CharacterAgent(AbstractAgent):
         async for chunk in retriever_chain.astream(prompt_text):
             final_output += chunk
             print(chunk, end="|", flush=True)
-        self.history.add_ai_message(final_output)
+        json_output = json.loads(final_output)
+        self.history.add_ai_message(json_output["action"]+json_output["input"])
         try:
 
             # 将输出解析为 JSON 对象
