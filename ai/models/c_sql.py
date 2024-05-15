@@ -123,22 +123,37 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
         self.sql_model_class.metadata.create_all(self.engine)
 
 
-    def messages(self, count: int = 100) -> List[BaseMessage]:  # type: ignore
-        """Retrieve the last 'count' messages from db, sorted by ascending id."""
-        with self.Session() as session:
+    def messages(self, count: int = 100) -> List[BaseMessage]:
+        """
+        从数据库中检索指定数量的消息记录。
+
+        参数:
+        count (int): 要检索的消息记录数量，默认为100。
+
+        返回值:
+        List[BaseMessage]: 检索到的消息记录列表，每个记录都是一个BaseMessage类型的实例。
+        """
+
+        with self.Session() as session:  # 创建数据库会话
+            # 根据会话ID查询消息记录，按消息ID降序排序，并限制返回的记录数
             result = (
                 session.query(self.sql_model_class)
                 .where(
                     getattr(self.sql_model_class, self.session_id_field_name)
                     == self.session_id
                 )
-                .order_by(self.sql_model_class.id.asc())
+                .order_by(self.sql_model_class.id.desc())
                 .limit(count)
             )
-            messages = []
-            for record in result:
+
+            messages = []  # 初始化消息列表
+
+            # 反向遍历查询结果，并将每条记录转换为BaseMessage对象，添加到消息列表中
+            for record in reversed (result):
                 messages.append(self.converter.from_sql_model(record))
-            return messages
+
+            return messages  # 返回消息列表
+
 
     def buffer(self, count: int = 100) -> str:
         """Retrieve the last 'count' messages from db, sorted by ascending id."""

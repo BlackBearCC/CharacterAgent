@@ -41,23 +41,9 @@ class CharacterAgent(AbstractAgent):
         with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
 
-        replacer = PlaceholderReplacer()
+        self.config = config
 
-        self.history:SQLChatMessageHistory =history
-
-        # 替换配置占位符
-        tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, config)
-
-        # 替换历史占位符
-        tuji_info_with_history = tuji_info.replace("{history}", self.history.buffer())
-
-        # 替换工具占位符
-        final_prompt = replacer.replace_tools_with_details(tuji_info_with_history,tools)
-        logging.info("==============替换工具后的提示字符串===============\n"+final_prompt)
-
-        self.deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
-
-        self.deep_chain = self.deep_prompt_template | self.llm | self.output_parser
+        self.history: SQLChatMessageHistory = history
 
         self.chain_mapping = {}
 
@@ -86,7 +72,22 @@ class CharacterAgent(AbstractAgent):
             print("==============相似度分数高于阈值，使用深度思考Agent===============")
             docs = [doc for doc, _ in docs_and_scores]
             # Although docs are calculated, they are not directly used here as per the original logic.
-            return self.deep_chain
+
+            replacer = PlaceholderReplacer()
+            # 替换配置占位符
+            tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
+
+            # 替换历史占位符
+            tuji_info_with_history = tuji_info.replace("{history}", self.history.buffer())
+
+            # 替换工具占位符
+            final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
+            logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)
+
+            deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
+
+            deep_chain = deep_prompt_template | self.llm | self.output_parser
+            return deep_chain
 
     async def use_tool_by_name(self, action_name: str, action_input: str) -> Any:
         """
