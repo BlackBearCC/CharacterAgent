@@ -31,7 +31,7 @@ class CharacterAgent(AbstractAgent):
         self.retriever = retriever
         self.document_util = document_util
         self.llm = llm
-        self.similarity_threshold = 0.4
+        self.similarity_threshold = 0.38
 
         # Setup chains
         self.setup_and_retrieval = RunnableParallel({"classic_scenes": retriever, "input": RunnablePassthrough()})
