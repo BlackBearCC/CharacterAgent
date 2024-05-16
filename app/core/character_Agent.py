@@ -73,7 +73,7 @@ class CharacterAgent(AbstractAgent):
             # 替换配置占位符
             tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
             # 替换历史占位符
-            tuji_info_with_history = tuji_info.replace("{history}", self.history.buffer())
+            tuji_info_with_history = tuji_info.replace("{history}", self.history.buffer(3))
             # 替换工具占位符
             final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
             logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)
