@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import time
@@ -6,7 +7,9 @@ from typing import Any, List, Optional
 
 from sqlalchemy import Column, Integer, Text, create_engine, text
 
+from ai.models.ai import AIMessage
 from ai.models.buffer import get_prefixed_buffer_string
+from ai.models.human import HumanMessage
 
 try:
     from sqlalchemy.orm import declarative_base
@@ -16,7 +19,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import (
     BaseMessage,
     message_to_dict,
-    messages_from_dict, HumanMessage, AIMessage,
+    messages_from_dict
 )
 from sqlalchemy.orm import sessionmaker
 
@@ -63,16 +66,23 @@ class DefaultMessageConverter(BaseMessageConverter):
         #         text(f"ALTER TABLE {table_name} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"))
 
     def from_sql_model(self, sql_message: Any) -> BaseMessage:
-
         message_dict = json.loads(sql_message.message)
         message_type = message_dict.get("type")
         content = message_dict.get("data", {}).get("content", "")
+        created_at = sql_message.created_at  # Get the timestamp from the SQL model
+
         if message_type == "human":
-            return HumanMessage(content=content)
+            message = HumanMessage(content=content, created_at=created_at)
         elif message_type == "ai":
-            return AIMessage(content=content)
+            message = AIMessage(content=content, created_at=created_at)
         else:
-            return BaseMessage(content=content)
+            message = BaseMessage(content=content, created_at=created_at)
+
+        # Add the created_at attribute to the message dict
+        message_dict["data"]["created_at"] = created_at
+        message.message = json.dumps(message_dict, ensure_ascii=False)
+
+        return message
 
     def to_sql_model(self, message: BaseMessage, session_id: str) -> Any:
         timestamp = int(time.time())  # Get current Unix timestamp
@@ -126,17 +136,15 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
         List[BaseMessage]: 检索到的消息记录列表，每个记录都是一个BaseMessage类型的实例。
         """
 
-        with self.Session() as session:  # 创建数据库会话
-            # 根据会话ID查询消息记录，按消息ID降序排序，并限制返回的记录数
+        with self.Session() as session:
             result = (
                 session.query(self.sql_model_class)
-                .where(
-                    getattr(self.sql_model_class, self.session_id_field_name)
-                    == self.session_id
-                )
+                .where(getattr(self.sql_model_class, self.session_id_field_name) == self.session_id)
                 .order_by(self.sql_model_class.id.desc())
                 .limit(count)
+                .all()  # 添加.all()来执行查询
             )
+
 
             messages = []  # 初始化消息列表
 
@@ -146,15 +154,26 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
 
             return messages  # 返回消息列表
 
-
-    def buffer(self, count: int = 100) -> str:
-        """Retrieve the last 'count' messages from db, sorted by ascending id."""
+    def buffer(self, count: int = 100, with_timestamps: bool = True) -> str:
         try:
-            _messages = self.messages(10)
-            history_buffer = get_prefixed_buffer_string(_messages, "大头哥", "兔几妹妹")
-            return history_buffer
+            _messages = self.messages(count)
+            history_buffer = ""
+
+            for message in reversed(_messages):
+                timestamp = datetime.datetime.fromtimestamp(message.created_at).strftime(
+                    "%Y-%m-%d %H:%M:%S") if with_timestamps else ""
+                if isinstance(message, HumanMessage):
+                    history_buffer += f"{timestamp} 大头哥: {message.content}\n"
+                elif isinstance(message, AIMessage):
+                    history_buffer += f"{timestamp} 兔几妹妹: {message.content}\n"
+
+            return history_buffer.strip()  # 去掉末尾换行符
         except Exception as e:
-            return ""
+            logger.error(f"Error occurred while fetching messages: {str(e)}")  # 记录错误日志
+            return "No messages found"  # 返回无消息提示
+
+
+
 
 
 
