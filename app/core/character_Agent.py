@@ -45,8 +45,6 @@ class CharacterAgent(AbstractAgent):
 
         self.history: SQLChatMessageHistory = history
 
-        self.chain_mapping = {}
-
         # 将列表转换为字典
         self.tools_dict = {tool.name: tool for tool in self.tools}
 
@@ -71,15 +69,11 @@ class CharacterAgent(AbstractAgent):
         else:
             print("==============相似度分数高于阈值，使用深度思考Agent===============")
             docs = [doc for doc, _ in docs_and_scores]
-            # Although docs are calculated, they are not directly used here as per the original logic.
-
             replacer = PlaceholderReplacer()
             # 替换配置占位符
             tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
-
             # 替换历史占位符
             tuji_info_with_history = tuji_info.replace("{history}", self.history.buffer())
-
             # 替换工具占位符
             final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
             logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)

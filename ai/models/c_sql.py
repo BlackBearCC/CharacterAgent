@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
@@ -42,24 +43,12 @@ class BaseMessageConverter(ABC):
 
 
 def create_message_model(table_name: str, DynamicBase: Any) -> Any:
-    """
-    Create a message model for a given table name.
-
-    Args:
-        table_name: The name of the table to use.
-        DynamicBase: The base class to use for the model.
-
-    Returns:
-        The model class.
-
-    """
-
-    # Model declared inside a function to have a dynamic table name.
     class Message(DynamicBase):  # type: ignore[valid-type, misc]
         __tablename__ = table_name
         id = Column(Integer, primary_key=True)
         session_id = Column(Text)
         message = Column(Text)  # Set collation to support Unicode characters
+        created_at = Column(Integer)  # Add a timestamp column (assuming Unix timestamp in seconds)
 
     return Message
 
@@ -86,10 +75,12 @@ class DefaultMessageConverter(BaseMessageConverter):
             return BaseMessage(content=content)
 
     def to_sql_model(self, message: BaseMessage, session_id: str) -> Any:
+        timestamp = int(time.time())  # Get current Unix timestamp
         return self.model_class(
-            session_id=session_id, message=json.dumps(message_to_dict(message), ensure_ascii=False)  # Ensure_ascii=False to support non-ASCII characters
+            session_id=session_id,
+            message=json.dumps(message_to_dict(message), ensure_ascii=False),
+            created_at=timestamp,  # Add created_at field
         )
-
     def get_sql_model_class(self) -> Any:
         return self.model_class
 
@@ -104,6 +95,7 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
         table_name: str = "message_store",
         session_id_field_name: str = "session_id",
         custom_message_converter: Optional[BaseMessageConverter] = None,
+        _create_table_if_not_exists: bool = True,
 
     ):
         self.connection_string = connection_string
@@ -157,10 +149,15 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
 
     def buffer(self, count: int = 100) -> str:
         """Retrieve the last 'count' messages from db, sorted by ascending id."""
-        _messages = self.messages(10)
-        history_buffer = get_prefixed_buffer_string(_messages, "大头哥", "兔几妹妹")
+        try:
+            _messages = self.messages(10)
+            history_buffer = get_prefixed_buffer_string(_messages, "大头哥", "兔几妹妹")
+            return history_buffer
+        except Exception as e:
+            return ""
 
-        return history_buffer
+
+
     def add_message(self, message: BaseMessage) -> None:
         """Append the message to the record in db"""
         with self.Session() as session:
