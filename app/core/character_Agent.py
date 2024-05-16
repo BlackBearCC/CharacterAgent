@@ -31,7 +31,7 @@ class CharacterAgent(AbstractAgent):
         self.retriever = retriever
         self.document_util = document_util
         self.llm = llm
-        self.similarity_threshold = 0.48
+        self.similarity_threshold = 0.4
 
         # Setup chains
         self.setup_and_retrieval = RunnableParallel({"classic_scenes": retriever, "input": RunnablePassthrough()})
@@ -64,10 +64,10 @@ class CharacterAgent(AbstractAgent):
         avg_score = sum(scores) / len(scores) if scores else 0
 
         if avg_score < self.similarity_threshold:
-            print("==============相似度分数低于阈值，使用原始prompt和检索到的文档===============")
+            print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
             return self.fast_chain
         else:
-            print("==============相似度分数高于阈值，使用深度思考Agent===============")
+            print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
             docs = [doc for doc, _ in docs_and_scores]
             replacer = PlaceholderReplacer()
             # 替换配置占位符
@@ -143,55 +143,53 @@ class CharacterAgent(AbstractAgent):
         action_input = deep_chain_output.get("input")
 
         if action_name is None:
-            logging.info("action_name 为空,无策略调用")
+            logging.info("Agent action_name 为空,无策略调用")
             return None
 
         # 验证 action_name 是否为字符串类型
         if not isinstance(action_name, str):
-            logging.error("action_name 非字符串类型")
+            logging.error("Agent action_name 非字符串类型")
             return None
 
         logging.info("Agent Use Chain: %s", action_name)
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
-
-    async def response(self, prompt_text:str):
-
-        # 格式化字符串
-        # self.history_buffer = get_prefixed_buffer_string(history.messages(), human_prefix="爸爸", ai_prefix="妹妹")
-
-
-
+    async def response(self, prompt_text: str):
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
         final_output = ""
         self.user_input = prompt_text
-
-
-
-
         self.history.add_user_message(prompt_text)
+        logging.info(f"User Input: {prompt_text}")
+        logging.info("Agent : 检索对话知识库中...")
+
         async for chunk in retriever_chain.astream(prompt_text):
             final_output += chunk
             print(chunk, end="|", flush=True)
-        json_output = json.loads(final_output)
-        self.history.add_ai_message(json_output["action"]+json_output["input"])
-        try:
 
-            # 将输出解析为 JSON 对象
-            json_output = json.loads(final_output)
-            print("\nValid JSON output:", json_output)
+        def handle_output(output):
+            try:
+                json_output = json.loads(output)
+                logging.info(f"Agent Action: {json_output}")
+                self.history.add_ai_message(json_output["action"] + json_output["input"])
+                return json_output
+            except json.JSONDecodeError:
+                logging.info("Agent Action: Use FastChain")
+                return output
+
+        final_json_output = handle_output(final_output)
+
+        if isinstance(final_json_output, dict):
             thought_step = ""
-            # 使用await等待协程执行并获取异步生成器
-            response_generator = await self.route_post_deep_chain(json_output)
-            # 使用异步生成器
-            async for chunk in response_generator:
+            async for chunk in await self.route_post_deep_chain(final_json_output):
                 thought_step += chunk
                 print(f"策略响应: {chunk}", flush=True)
+            logging.info(f"Agent Deep Chain Output: {thought_step}")
             self.history.add_ai_message(thought_step)
-        except json.JSONDecodeError:
-            print("\nInvalid JSON output")
-
+        else:
+            logging.info(f"Agent Fast Chain Output: {final_output}")
+            self.history.add_ai_message(final_output)
+            pass
 
     def perform_task(self, task: str, data: dict) -> int:
         return 200
