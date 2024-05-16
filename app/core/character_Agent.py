@@ -31,7 +31,7 @@ class CharacterAgent(AbstractAgent):
         self.retriever = retriever
         self.document_util = document_util
         self.llm = llm
-        self.similarity_threshold = 0.3
+        self.similarity_threshold = 0.48
 
         # Setup chains
         self.setup_and_retrieval = RunnableParallel({"classic_scenes": retriever, "input": RunnablePassthrough()})
@@ -57,7 +57,7 @@ class CharacterAgent(AbstractAgent):
 
 
     async def rute_retriever(self, query):
-        docs_and_scores = self.document_util.vectordb.similarity_search_with_score(query)
+        docs_and_scores = self.document_util.vectordb.similarity_search_with_score(query=query, k=3)
         print(docs_and_scores)
 
         scores = [score for _, score in docs_and_scores]
