@@ -25,6 +25,7 @@ import os
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from starlette.middleware.sessions import SessionMiddleware
 
 from ai.models import QianwenModel
 from ai.models.buffer import get_prefixed_buffer_string
@@ -42,7 +43,6 @@ from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool
     OpinionTool, DefenseTool, RepeatTool, TopicTool
 from utils.document_processing_tool import DocumentProcessingTool
 from utils.placeholder_replacer import PlaceholderReplacer
-
 
 
 # 创建数据库引擎
@@ -132,7 +132,7 @@ history_buffer = chat_message_history.buffer()
 # print(history_buffer)
 tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history=chat_message_history)
 
-
+testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
 async def main():
 
 
@@ -142,7 +142,7 @@ async def main():
         user_input = input("请输入你的消息：")
         if user_input.lower() == "退出":
             break
-        await tuji_agent.response(user_input)
+        await tuji_agent.response(uid=testuid,input_text=user_input)
         # message_strings = [str(message) for message in chat_message_history.messages(20)]
         # logging.info("当前对话历史记录：" + ", ".join(message_strings))
     # 获取消息列表

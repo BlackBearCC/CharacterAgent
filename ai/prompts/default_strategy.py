@@ -95,7 +95,7 @@ OPINION_STRATEGY_TASK = """
 <EXAMPLE>
 返回的JSON格式：
 {{
-    "id": "1",
+    "id": "1-999的int类型",
     "opinion": "一句话描述的观点",
     "score": "1.0-5.0的Likert量表评分",
     "reason":"形成观点的原因"

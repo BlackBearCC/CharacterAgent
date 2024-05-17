@@ -6,8 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional, Union
 
-from sqlalchemy import Column, Integer, Text, Float, create_engine, text, String, ForeignKey
-
+from sqlalchemy import Column, Integer, Text, Float, create_engine, text, String, ForeignKey, MetaData
 
 from data.database.mysql.base import Base
 
@@ -84,6 +83,13 @@ class DefaultOpinionConverter(BaseOpinionConverter):
     def get_sql_model_class(self) -> Any:
         return self.model_class
 
+class OpinionModel(Base):
+    __tablename__ = "opinion_store"
+    opinion_id = Column(Integer, autoincrement=True, primary_key=True)
+    user_guid = Column(String(128), ForeignKey('user.guid'))
+    opinion = Column(Text)
+    score = Column(Float)
+    reason = Column(Text)
 # OpinionHistory 类：存储在 SQL 数据库中的观点历史
 class OpinionMemory:
     """Opinion history stored in an SQL database."""
@@ -98,25 +104,17 @@ class OpinionMemory:
         self.engine = create_engine(connection_string, echo=False)
         self.table_name = table_name
         self.Session = sessionmaker(bind=self.engine)
-        self.OpinionModel = self._create_opinion_model()
+        # 使用已定义的 OpinionModel 类
+        self.OpinionModel = OpinionModel
+
         if _create_table_if_not_exists:
             self._create_table_if_not_exists()
 
-    def _create_opinion_model(self) -> Any:
-
-        class OpinionModel(Base):
-            __tablename__ = self.table_name
-            opinion_id = Column(Integer, autoincrement=True, primary_key=True)
-            user_guid = Column(String(128), ForeignKey('user.guid'))  # 外键引用用户表的 guid
-            opinion = Column(Text)
-            score = Column(Float)
-            reason = Column(Text)
-
-        return OpinionModel
-
     def _create_table_if_not_exists(self) -> None:
-        # 如果不存在则创建表
-        self.OpinionModel.metadata.create_all(self.engine)
+        # 检查表是否存在，如果不存在则创建
+        metadata = MetaData(self.engine)
+        if self.table_name not in metadata.tables:
+            self.OpinionModel.metadata.create_all(self.engine)
     def get_opinions(self, user_guid: str, count: int = 100) -> List[Opinion]:
         # 获取特定用户的观点列表
         with self.Session() as session:
@@ -167,11 +165,25 @@ class OpinionMemory:
 
         # 更新观点
         with self.Session() as session:
-            opinion_to_update = session.query(self.OpinionModel).filter_by(user_guid=user_guid, opinion_id=opinion.opinion_id).first()
+            opinion_to_update = session.query(self.OpinionModel).filter_by(user_guid=user_guid,
+                                                                           opinion_id=opinion.opinion_id).first()
             if opinion_to_update:
                 opinion_to_update.score = opinion.score
                 opinion_to_update.reason = opinion.reason
                 session.commit()
+                logger.info(f"记录ID存在,观点已更新。新评分：{opinion.score}。")
+            else:
+                # 如果没有找到匹配的记录，插入新记录
+                new_opinion = self.OpinionModel(
+                    user_guid=user_guid,
+                    opinion=opinion.opinion,
+                    score=opinion.score,
+                    reason=opinion.reason
+                )
+                session.add(new_opinion)
+                session.commit()
+                logger.info(f"记录ID不存在,新ID插入。新评分：{opinion.score}")
+
 
     def buffer(self, user_guid: str, count: int = 100) -> str:
         # 获取并返回特定用户的观点历史的缓冲区

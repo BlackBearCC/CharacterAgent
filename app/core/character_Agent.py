@@ -51,7 +51,7 @@ class CharacterAgent(AbstractAgent):
 
         self.user_input = ""
 
-
+        self.uid = ""
 
 
 
@@ -76,7 +76,7 @@ class CharacterAgent(AbstractAgent):
             # 替换观点占位符
             opinion_memory = OpinionMemory(
                 connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
-            info_with_opinion =  tuji_info.replace("{opinion}",opinion_memory.buffer(10) )
+            info_with_opinion =  tuji_info.replace("{opinion}",opinion_memory.buffer(self.uid,10) )
             # 替换历史占位符
             tuji_info_with_history = info_with_opinion.replace("{history}", self.history.buffer(3))
             # 替换工具占位符
@@ -112,7 +112,7 @@ class CharacterAgent(AbstractAgent):
                 if hasattr(tool_instance, 'strategy'):
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-                    response_gen = tool_instance.strategy(user_input=self.user_input, action_input=action_input)
+                    response_gen = tool_instance.strategy(uid =self.uid,user_input=self.user_input, action_input=action_input)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         return response_gen
                     else:
@@ -159,26 +159,27 @@ class CharacterAgent(AbstractAgent):
         logging.info("Agent Use Chain: %s", action_name)
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
-    async def response(self, prompt_text: str):
+    async def response(self, uid:str ,input_text: str):
         """
         异步处理用户输入，并生成相应的响应。
 
-        :param prompt_text: 用户的输入文本。
+        :param uid:
+        :param user_input: 用户的输入文本。
         :return: 无返回值，但会异步处理用户输入，并通过日志和历史记录对话过程。
         """
-
+        self.uid = uid
         # 初始化检索链
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
 
         final_output = ""  # 用于存储最终输出字符串
-        self.user_input = prompt_text  # 存储用户输入
-        self.history.add_user_message(prompt_text)  # 在历史记录中添加用户消息
-        logging.info(f"User Input: {prompt_text}")  # 记录用户输入的日志
+        self.user_input = input_text  # 存储用户输入
+        self.history.add_user_message(input_text)  # 在历史记录中添加用户消息
+        logging.info(f"User Input: {input_text}")  # 记录用户输入的日志
         logging.info("Agent : 检索对话知识库中...")
 
         # 通过检索链异步获取响应片段，并累加到最终输出
-        async for chunk in retriever_chain.astream(prompt_text):
+        async for chunk in retriever_chain.astream(input_text):
             final_output += chunk
             print(chunk, end="|", flush=True)
 
