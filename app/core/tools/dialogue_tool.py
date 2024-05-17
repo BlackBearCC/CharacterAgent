@@ -14,6 +14,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSerializable
 
+from ai.models.role_memory import OpinionMemory
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY, FACT_TRANSFORM_STRATEGY, EXPRESSION_STRATEGY, \
     INFORMATION_STRATEGY, DEFENSE_STRATEGY, OPINION_STRATEGY, OPINION_STRATEGY_TASK
@@ -182,8 +183,17 @@ class OpinionTool(DialogueTool):
         prompt_template = PromptTemplate(template=OPINION_STRATEGY_TASK, input_variables=["input","history"])
         output_parser = StrOutputParser()
         task_chain = prompt_template | llm | output_parser
+        final_chunk = ""
         async for chunk in task_chain.astream({"input": action_input, "history": dialogue_history}):
+            final_chunk+=chunk
             print(chunk, end="",flush=True)
+        opinion_memory = OpinionMemory(
+            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
+        )
+        print(final_chunk)
+        opinion_memory.add_opinion(data=final_chunk)
+
+        # opinion_memory.add_opinion(final_chunk)
 
 
 class DefenseTool(DialogueTool):
