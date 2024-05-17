@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnableP
 
 from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
+from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from utils.placeholder_replacer import PlaceholderReplacer
@@ -72,8 +73,12 @@ class CharacterAgent(AbstractAgent):
             replacer = PlaceholderReplacer()
             # 替换配置占位符
             tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
+            # 替换观点占位符
+            opinion_memory = OpinionMemory(
+                connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
+            info_with_opinion =  tuji_info.replace("{opinion}",opinion_memory.buffer(10) )
             # 替换历史占位符
-            tuji_info_with_history = tuji_info.replace("{history}", self.history.buffer(3))
+            tuji_info_with_history = info_with_opinion.replace("{history}", self.history.buffer(3))
             # 替换工具占位符
             final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
             logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)
@@ -155,19 +160,35 @@ class CharacterAgent(AbstractAgent):
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
     async def response(self, prompt_text: str):
+        """
+        异步处理用户输入，并生成相应的响应。
+
+        :param prompt_text: 用户的输入文本。
+        :return: 无返回值，但会异步处理用户输入，并通过日志和历史记录对话过程。
+        """
+
+        # 初始化检索链
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
-        final_output = ""
-        self.user_input = prompt_text
-        self.history.add_user_message(prompt_text)
-        logging.info(f"User Input: {prompt_text}")
+
+        final_output = ""  # 用于存储最终输出字符串
+        self.user_input = prompt_text  # 存储用户输入
+        self.history.add_user_message(prompt_text)  # 在历史记录中添加用户消息
+        logging.info(f"User Input: {prompt_text}")  # 记录用户输入的日志
         logging.info("Agent : 检索对话知识库中...")
 
+        # 通过检索链异步获取响应片段，并累加到最终输出
         async for chunk in retriever_chain.astream(prompt_text):
             final_output += chunk
             print(chunk, end="|", flush=True)
 
         def handle_output(output):
+            """
+            处理检索链的输出，尝试将其解析为JSON，失败则视为普通文本输出。
+
+            :param output: 检索链的输出文本。
+            :return: 解析后的JSON对象或原始文本。
+            """
             try:
                 json_output = json.loads(output)
                 logging.info(f"Agent Action: {json_output}")
@@ -177,19 +198,22 @@ class CharacterAgent(AbstractAgent):
                 logging.info("Agent Action: Use FastChain")
                 return output
 
-        final_json_output = handle_output(final_output)
+        final_json_output = handle_output(final_output)  # 处理最终的检索链输出
 
         if isinstance(final_json_output, dict):
             thought_step = ""
+            # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
             async for chunk in await self.route_post_deep_chain(final_json_output):
                 thought_step += chunk
                 print(f"策略响应: {chunk}", flush=True)
             logging.info(f"Agent Deep Chain Output: {thought_step}")
             self.history.add_ai_message(thought_step)
         else:
+            # 如果输出不是字典，则视为快速链输出
             logging.info(f"Agent Fast Chain Output: {final_output}")
             self.history.add_ai_message(final_output)
-            pass
+            pass  # 忽略else块中的pass，避免修改原有代码逻辑
+
 
     def perform_task(self, task: str, data: dict) -> int:
         return 200

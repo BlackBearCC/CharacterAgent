@@ -191,7 +191,7 @@ class OpinionTool(DialogueTool):
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
         )
         print(final_chunk)
-        opinion_memory.add_opinion(data=final_chunk)
+        opinion_memory.update_opinion(data=final_chunk)
 
         # opinion_memory.add_opinion(final_chunk)
 

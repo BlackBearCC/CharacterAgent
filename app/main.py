@@ -23,11 +23,15 @@ from langchain_core.prompts import PromptTemplate, SystemMessagePromptTemplate, 
 import os
 
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from ai.models import QianwenModel
 from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
+from ai.models.role_memory import OpinionMemory
+from ai.models.user import UserDatabase
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
@@ -40,7 +44,15 @@ from utils.document_processing_tool import DocumentProcessingTool
 from utils.placeholder_replacer import PlaceholderReplacer
 
 
+
+# 创建数据库引擎
+DATABASE_URL = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
+engine = create_engine(DATABASE_URL)
+
+# 创建Session工厂
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 app = FastAPI()
+
 
 # 创建一个日志处理器
 class SSLFilter(logging.Filter):
@@ -95,6 +107,9 @@ retriever = document_util.process_and_build_vector_db()
 # output_parser = StrOutputParser()
 # emotion_chain = emotion_template | llm | output_parser
 
+connection_string = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
+user_database = UserDatabase(connection_string)
+user_database.add_user("test_user", "test_user@example.com")
 
 tools = [
     EmotionCompanionTool(),

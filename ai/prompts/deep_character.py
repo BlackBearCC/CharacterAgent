@@ -17,8 +17,8 @@ from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 
 DEEP_CHARACTER_PROMPT = BASE_CHARACTER_PROMPT+"""
 <OPINION>
-使用1-5的Likert量表评分，并包含原因
-opinion:蛇是令人生畏的的怪物，score:3，reason:因为蛇是强壮的，而且会吐出毒液。
+(1-5的Likert量表评分形式及原因)
+{opinion}
 </OPINION>
 ##历史记录
 {history}

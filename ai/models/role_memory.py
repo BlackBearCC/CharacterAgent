@@ -6,7 +6,10 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional, Union
 
-from sqlalchemy import Column, Integer, Text, Float, create_engine, text
+from sqlalchemy import Column, Integer, Text, Float, create_engine, text, String, ForeignKey
+
+
+from data.database.mysql.base import Base
 
 try:
     from sqlalchemy.orm import declarative_base, sessionmaker
@@ -45,8 +48,8 @@ class BaseOpinionConverter(ABC):
         raise NotImplementedError
 
 # 创建 Opinion 模型类
-def create_opinion_model(table_name: str, DynamicBase: Any) -> Any:
-    class OpinionModel(DynamicBase):
+def create_opinion_model(table_name: str, Base: Any) -> Any:
+    class OpinionModel(Base):
         __tablename__ = table_name
         opinion_id = Column(Integer, primary_key=True)
         opinion = Column(Text)
@@ -60,7 +63,7 @@ class DefaultOpinionConverter(BaseOpinionConverter):
     """The default opinion converter for OpinionHistory."""
 
     def __init__(self, table_name: str):
-        self.model_class = create_opinion_model(table_name, declarative_base())
+        self.model_class = create_opinion_model(table_name, Base)
 
     def from_sql_model(self, sql_opinion: Any) -> Opinion:
         return Opinion(
@@ -100,12 +103,11 @@ class OpinionMemory:
             self._create_table_if_not_exists()
 
     def _create_opinion_model(self) -> Any:
-        # 创建 Opinion 模型
-        Base = declarative_base()
 
         class OpinionModel(Base):
             __tablename__ = self.table_name
-            opinion_id = Column(Integer, primary_key=True)
+            opinion_id = Column(Integer, autoincrement=True, primary_key=True)
+            user_guid = Column(String(128), ForeignKey('user.guid'))  # 外键引用用户表的 guid
             opinion = Column(Text)
             score = Column(Float)
             reason = Column(Text)
@@ -115,17 +117,16 @@ class OpinionMemory:
     def _create_table_if_not_exists(self) -> None:
         # 如果不存在则创建表
         self.OpinionModel.metadata.create_all(self.engine)
-
-    def get_opinions(self, count: int = 100) -> List[Opinion]:
-        # 获取观点列表
+    def get_opinions(self, user_guid: str, count: int = 100) -> List[Opinion]:
+        # 获取特定用户的观点列表
         with self.Session() as session:
-            query = session.query(self.OpinionModel).order_by(self.OpinionModel.opinion_id.desc()).limit(count)
+            query = session.query(self.OpinionModel).filter_by(user_guid=user_guid).order_by(self.OpinionModel.opinion_id.desc()).limit(count)
             opinions = []
             for row in query.all():
                 opinions.append(Opinion(opinion_id=row.opinion_id, opinion=row.opinion, score=row.score, reason=row.reason))
             return opinions
 
-    def add_opinion(self, data: Union[Opinion, str]) -> None:
+    def add_opinion(self, user_guid: str, data: Union[Opinion, str]) -> None:
         # 如果输入参数是 Opinion 对象，则直接添加到数据库
         if isinstance(data, Opinion):
             opinion = data
@@ -143,24 +144,39 @@ class OpinionMemory:
 
         # 添加观点
         with self.Session() as session:
-            new_opinion = self.OpinionModel(opinion_id=opinion.opinion_id, opinion=opinion.opinion, score=opinion.score,
+            new_opinion = self.OpinionModel(user_guid=user_guid, opinion_id=opinion.opinion_id, opinion=opinion.opinion, score=opinion.score,
                                             reason=opinion.reason)
             session.add(new_opinion)
             session.commit()
 
-    def update_opinion(self, opinion_id: int, new_score: float, new_reason: str) -> None:
+    def update_opinion(self, user_guid: str, data: Union[Opinion, str]) -> None:
+        # 如果 data 参数是 Opinion 对象，则直接使用
+        if isinstance(data, Opinion):
+            opinion = data
+        # 如果 data 参数是 JSON 字符串，则将其转换为 Opinion 对象
+        elif isinstance(data, str):
+            json_data = json.loads(data)
+            opinion = Opinion(
+                opinion_id=None,  # 如果 opinion_id 是自增的数据库字段，可以设置为 None
+                opinion=json_data.get("opinion", ""),
+                score=float(json_data.get("score", 0.0)),  # 将字符串类型的 score 转换为浮点数
+                reason=json_data.get("reason", "")
+            )
+        else:
+            raise ValueError("Invalid input type. Input must be either an Opinion object or a JSON string.")
+
         # 更新观点
         with self.Session() as session:
-            opinion_to_update = session.query(self.OpinionModel).filter_by(opinion_id=opinion_id).first()
+            opinion_to_update = session.query(self.OpinionModel).filter_by(user_guid=user_guid, opinion_id=opinion.opinion_id).first()
             if opinion_to_update:
-                opinion_to_update.score = new_score
-                opinion_to_update.reason = new_reason
+                opinion_to_update.score = opinion.score
+                opinion_to_update.reason = opinion.reason
                 session.commit()
 
-    def buffer(self, count: int = 100) -> str:
-        # 获取并返回观点历史的缓冲区
+    def buffer(self, user_guid: str, count: int = 100) -> str:
+        # 获取并返回特定用户的观点历史的缓冲区
         try:
-            _opinions = self.get_opinions(count)
+            _opinions = self.get_opinions(user_guid, count)
             history_buffer = ""
 
             for opinion in reversed(_opinions):
