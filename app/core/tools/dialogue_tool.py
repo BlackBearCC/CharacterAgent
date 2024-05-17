@@ -14,6 +14,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSerializable
 
+from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY, FACT_TRANSFORM_STRATEGY, EXPRESSION_STRATEGY, \
@@ -163,7 +164,7 @@ class InformationTool(DialogueTool):
 class OpinionTool(DialogueTool):
     """观点评价策略"""
     name = "观点评价"
-    description = "用于发表对<OPINION>相关实体的评价或新的重要的实体进行深入评估，用1-5的Likert量表评分并解释原因。评分只会影响观点，不透露分数。"
+    description = "用于发表对<OPINION>相关实体的评价或新的重要的实体进行深入评估，用1-5的Likert量表评分并解释原因。评分只会影响观点，不透露分数。返回的关键信息格式：参考的OPINION的ID/opinion/你的回复指导"
 
     chain = _init_chain(OPINION_STRATEGY)
 
@@ -178,18 +179,26 @@ class OpinionTool(DialogueTool):
 
     async def opinion_task(self,uid:str,action_input: str,dialogue_history:str):
         logging.info("Agent 执行 opinion_task 任务")
+        opinion_memory = OpinionMemory(
+            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
+        )
+
+        chat_history= SQLChatMessageHistory(
+            session_id="test_session",
+            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
+        )
+
+
         llm = Tongyi(model_name="qwen-max", top_p=0.4,
                      dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         prompt_template = PromptTemplate(template=OPINION_STRATEGY_TASK, input_variables=["input","history"])
         output_parser = StrOutputParser()
         task_chain = prompt_template | llm | output_parser
         final_chunk = ""
-        async for chunk in task_chain.astream({"input": action_input, "history": dialogue_history}):
+        async for chunk in task_chain.astream({"input": action_input, "history": chat_history.buffer(6)}):
             final_chunk+=chunk
             print(chunk, end="",flush=True)
-        opinion_memory = OpinionMemory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
+
         print(final_chunk)
         opinion_memory.update_opinion(user_guid=uid,data=final_chunk)
 

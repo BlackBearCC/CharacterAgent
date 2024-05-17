@@ -115,7 +115,7 @@ class OpinionMemory:
         metadata = MetaData(self.engine)
         if self.table_name not in metadata.tables:
             self.OpinionModel.metadata.create_all(self.engine)
-    def get_opinions(self, user_guid: str, count: int = 100) -> List[Opinion]:
+    def get_opinions(self, user_guid: str, count: int = 20) -> List[Opinion]:
         # 获取特定用户的观点列表
         with self.Session() as session:
             query = session.query(self.OpinionModel).filter_by(user_guid=user_guid).order_by(self.OpinionModel.opinion_id.desc()).limit(count)
@@ -123,6 +123,7 @@ class OpinionMemory:
             for row in query.all():
                 opinions.append(Opinion(opinion_id=row.opinion_id, opinion=row.opinion, score=row.score, reason=row.reason))
             return opinions
+
 
     def add_opinion(self, user_guid: str, data: Union[Opinion, str]) -> None:
         # 如果输入参数是 Opinion 对象，则直接添加到数据库
@@ -155,7 +156,7 @@ class OpinionMemory:
         elif isinstance(data, str):
             json_data = json.loads(data)
             opinion = Opinion(
-                opinion_id=None,  # 如果 opinion_id 是自增的数据库字段，可以设置为 None
+                opinion_id=json_data.get("id", None),  # 如果 opinion_id 是自增的数据库字段，可以设置为 None
                 opinion=json_data.get("opinion", ""),
                 score=float(json_data.get("score", 0.0)),  # 将字符串类型的 score 转换为浮点数
                 reason=json_data.get("reason", "")
