@@ -115,14 +115,28 @@ class OpinionMemory:
         metadata = MetaData(self.engine)
         if self.table_name not in metadata.tables:
             self.OpinionModel.metadata.create_all(self.engine)
-    def get_opinions(self, user_guid: str, count: int = 20) -> List[Opinion]:
-        # 获取特定用户的观点列表
+
+    def get_opinions(self, user_guid: str, count: int = 20, opinion_id: Optional[int] = None) -> List[Opinion]:
+        # 获取特定用户的观点列表，可选指定观点ID
         with self.Session() as session:
-            query = session.query(self.OpinionModel).filter_by(user_guid=user_guid).order_by(self.OpinionModel.opinion_id.desc()).limit(count)
-            opinions = []
-            for row in query.all():
-                opinions.append(Opinion(opinion_id=row.opinion_id, opinion=row.opinion, score=row.score, reason=row.reason))
-            return opinions
+            # 初始化查询条件
+            query = session.query(self.OpinionModel).filter_by(user_guid=user_guid).order_by(self.OpinionModel.opinion_id.desc())
+
+            # 如果提供了opinion_id，则添加到查询条件中
+            if opinion_id is not None:
+                # 当有opinion_id时，查询单个观点
+                opinion = query.filter_by(opinion_id=opinion_id).first()
+                return opinion if opinion else None
+
+            # 如果查询特定ID，不需要限制数量；否则，应用count限制
+            else:
+                # 没有opinion_id时，查询最近的观点列表
+                opinions = [
+                    Opinion(opinion_id=row.opinion_id, opinion=row.opinion, score=row.score, reason=row.reason)
+                    for row in query.limit(count).all()
+                ]
+                return opinions
+
 
 
     def add_opinion(self, user_guid: str, data: Union[Opinion, str]) -> None:
@@ -199,3 +213,17 @@ class OpinionMemory:
         except Exception as e:
             logger.error(f"Error occurred while fetching opinions: {str(e)}")
             return "No opinions found"
+
+    def buffer_by_id(self, user_guid: str, opinion_id: int) -> str:
+        """
+        获取并返回特定用户指定观点ID的观点信息缓冲区。
+        """
+        try:
+            opinion = self.get_opinions(user_guid, opinion_id=opinion_id)
+            if opinion:  # 修改此处，确保我们有一个Opinion对象，而不是列表
+                return f"ID: {opinion.opinion_id}, Opinion: {opinion.opinion}, Score: {opinion.score}, Reason: {opinion.reason}\n"
+            else:
+                return "Opinion not found"
+        except Exception as e:
+            logger.error(f"Error occurred while fetching opinion: {str(e)}")
+            return "Error fetching opinion"

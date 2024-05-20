@@ -36,7 +36,7 @@ ACTION：选择合适对话策略，考虑到话题延续性，如果是处于�
 
 
 
-##直接使用json格式输出你调用的策略和传给该策略的input内容，如果策略有指定的的param，必须遵循且精简回复。不输出任何其他内容和完整自然语言。
+##直接使用json格式输出你调用的策略和传给该策略的input内容，如果策略有指定的的param，必须遵循param的格式且精简回复，reply_instruction的值是对你回复内容的组成要求，&&表示必须出现，||表示可选，只回复关键词。不输出任何其他内容和完整自然语言。
 
 Example:
 输入：我心情不好
@@ -44,8 +44,9 @@ Example:
 {{
     "action": "策略",
     "input": {{
-        "param1": "value1"
-        "param2": "value2"
+        "param1": "value1",
+        "param2": "value2",
+        "reply_instruction":"安慰，保持热爱"
         ...
     }}
 }}
