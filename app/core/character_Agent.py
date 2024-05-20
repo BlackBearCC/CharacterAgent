@@ -61,17 +61,24 @@ class CharacterAgent(AbstractAgent):
         scores = [score for _, score in docs_and_scores]
         avg_score = sum(scores) / len(scores) if scores else 0
 
+        opinion_memory = OpinionMemory(
+            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
+        role_state = "'体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着'"
+        history = self.history.buffer(9)
+
         if avg_score < self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
             # Setup chains
+            info_with_state = self.character_info.replace("{role_state}", role_state)
+            info_with_opinion = info_with_state.replace("{opinion}", opinion_memory.buffer(self.uid, 10))
+            info_with_history = info_with_opinion.replace("{history}", history)
 
-            info_with_history = self.character_info.replace("{history}", self.history.buffer(9))
-            print("info_with_history", info_with_history)
+            logging.info("Agent FastChain 动态信息填充:", info_with_history)
+
             prompt_template = PromptTemplate(template=info_with_history, input_variables=["classic_scenes", "input"])
             output_parser = StrOutputParser()
             setup_and_retrieval = RunnableParallel({"classic_scenes": self.retriever, "input": RunnablePassthrough()})
             fast_chain = setup_and_retrieval | prompt_template | self.llm | output_parser
-            logging.info(fast_chain)
             return fast_chain
 
         else:
@@ -81,16 +88,13 @@ class CharacterAgent(AbstractAgent):
             replacer = PlaceholderReplacer()
             # 替换配置占位符
             tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
-
             #替换角色状态占位符
-            info_with_state = tuji_info.replace("{role_state}", "'体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着'")
-            print(info_with_state)
+            info_with_state = tuji_info.replace("{role_state}", role_state)
             # 替换观点占位符
-            opinion_memory = OpinionMemory(
-                connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
+
             info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(self.uid,10) )
             # 替换历史占位符
-            tuji_info_with_history = info_with_opinion.replace("{history}", self.history.buffer(9))
+            tuji_info_with_history = info_with_opinion.replace("{history}", history)
             # 替换工具占位符
             final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
             logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)
@@ -228,7 +232,7 @@ class CharacterAgent(AbstractAgent):
             # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
             async for chunk in await self.route_post_deep_chain(final_json_output):
                 strategy_output += chunk
-                print(f"策略响应: {chunk}", end="|", flush=True)
+                print(f"{chunk}", end="|", flush=True)
             logging.info(f"Agent Deep Chain Output: {strategy_output}")
             self.history.add_ai_message(strategy_output)
         else:
