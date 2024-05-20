@@ -119,7 +119,7 @@ class FactTransformTool(DialogueTool):
 class ExpressionTool(DialogueTool):
     """表达诉求策略"""
     name = "表达诉求"
-    description = "表达角色需求，生理、安全，再社交、尊重，最后自我实现。确保表达明确且符合角色性格。"
+    description = "用户回复和个人状态相关的问题，也可在不影响对话体验的情况下使用，基于ROLE_STATE表达角色需求，需求层级遵循马斯洛需求远离。"
     params = {
         "reply_instruction": "回复的关键词"
     }

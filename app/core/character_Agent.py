@@ -73,10 +73,14 @@ class CharacterAgent(AbstractAgent):
             replacer = PlaceholderReplacer()
             # 替换配置占位符
             tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
+
+            #替换角色状态占位符
+            info_with_state = tuji_info.replace("{role_state}", "'体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着'")
+            print(info_with_state)
             # 替换观点占位符
             opinion_memory = OpinionMemory(
                 connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
-            info_with_opinion =  tuji_info.replace("{opinion}",opinion_memory.buffer(self.uid,10) )
+            info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(self.uid,10) )
             # 替换历史占位符
             tuji_info_with_history = info_with_opinion.replace("{history}", self.history.buffer(9))
             # 替换工具占位符

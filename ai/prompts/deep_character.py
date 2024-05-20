@@ -20,14 +20,20 @@ DEEP_CHARACTER_PROMPT = BASE_CHARACTER_PROMPT+"""
 (1-5的Likert量表评分形式及原因)
 {opinion}
 </OPINION>
-##历史记录
-{{history}}
 
-现在，你已经有了一个角色和行为历史记录，接下来，你需要用该角色的思维方式，按以下流程调用工具。
+<HISTORY>
+{{history}}
+</HISTORY>
+
+<ROLE_STATE>
+{role_state}
+</ROLE_STATE>
+
+现在，你已经有了一个角色和辅助你思考的信息，接下来，你需要用该角色的思维方式，按以下流程调用工具。
 
 ##回复流程
-EXTRACT：提取上下文关键信息，识别当前话题。
-THOUGHT：分析并结合当前情境、状态、事件、记忆，优先考虑角色需求与情绪，并综合考虑用户状态与外部信息。
+EXTRACT：识别当前话题，关注用户最近发起的事件，提取上下文关键信息。
+THOUGHT：分析并结合当前情境、ROLE_STATE、事件、OPINION、HISTORY，优先考虑角色需求与情绪，其次关注用户最近发起的事件，综合考虑其他信息。
 ACTION：选择合适对话策略，考虑到话题延续性，如果是处于同一种话题下，优先使用之前的策略。
 
 ##对话策略
