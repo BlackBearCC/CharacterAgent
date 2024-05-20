@@ -27,16 +27,13 @@ class CharacterAgent(AbstractAgent):
         self.tools = tools
 
 
-        self.prompt_template = PromptTemplate(template=character_info, input_variables=["classic_scenes", "input"])
-        self.output_parser = StrOutputParser()
+
         self.retriever = retriever
         self.document_util = document_util
         self.llm = llm
         self.similarity_threshold = 0.38
 
-        # Setup chains
-        self.setup_and_retrieval = RunnableParallel({"classic_scenes": retriever, "input": RunnablePassthrough()})
-        self.fast_chain = self.setup_and_retrieval | self.prompt_template | self.llm | self.output_parser
+
 
         # 加载JSON配置文件
         with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
@@ -66,10 +63,21 @@ class CharacterAgent(AbstractAgent):
 
         if avg_score < self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
-            return self.fast_chain
+            # Setup chains
+
+            info_with_history = self.character_info.replace("{history}", self.history.buffer(9))
+            print("info_with_history", info_with_history)
+            prompt_template = PromptTemplate(template=info_with_history, input_variables=["classic_scenes", "input"])
+            output_parser = StrOutputParser()
+            setup_and_retrieval = RunnableParallel({"classic_scenes": self.retriever, "input": RunnablePassthrough()})
+            fast_chain = setup_and_retrieval | prompt_template | self.llm | output_parser
+            logging.info(fast_chain)
+            return fast_chain
+
         else:
             print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
             docs = [doc for doc, _ in docs_and_scores]
+            output_parser = StrOutputParser()
             replacer = PlaceholderReplacer()
             # 替换配置占位符
             tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
@@ -89,7 +97,7 @@ class CharacterAgent(AbstractAgent):
 
             deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
 
-            deep_chain = deep_prompt_template | self.llm | self.output_parser
+            deep_chain = deep_prompt_template | self.llm | output_parser
             return deep_chain
 
     async def use_tool_by_name(self, action_name: str, action_input: str) -> Any:
@@ -199,9 +207,14 @@ class CharacterAgent(AbstractAgent):
                 logging.info(f"Agent Action: {json_output}")
 
                 # 将字典转换为JSON格式的字符串
-                input_str = json.dumps(json_output["input"], ensure_ascii=False)
+                # input_str = json.dumps(json_output["input"], ensure_ascii=False)
+                concatenated_values = ''
+                for key, value in json_output["input"].items():
+                    # 拼接键值
+                    concatenated_values += f"{key}={value}"+','
 
-                message = f"Action: {json_output['action']} - Input: {input_str}"
+
+                message = f"Action: {json_output['action']} - Input: {concatenated_values}"
                 self.history.add_ai_message(message)
                 return json_output
             except json.JSONDecodeError:
@@ -211,13 +224,13 @@ class CharacterAgent(AbstractAgent):
         final_json_output = handle_output(final_output)  # 处理最终的检索链输出
 
         if isinstance(final_json_output, dict):
-            thought_step = ""
+            strategy_output = ""
             # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
             async for chunk in await self.route_post_deep_chain(final_json_output):
-                thought_step += chunk
-                print(f"策略响应: {chunk}", flush=True)
-            logging.info(f"Agent Deep Chain Output: {thought_step}")
-            self.history.add_ai_message(thought_step)
+                strategy_output += chunk
+                print(f"策略响应: {chunk}", end="|", flush=True)
+            logging.info(f"Agent Deep Chain Output: {strategy_output}")
+            self.history.add_ai_message(strategy_output)
         else:
             # 如果输出不是字典，则视为快速链输出
             logging.info(f"Agent Fast Chain Output: {final_output}")
