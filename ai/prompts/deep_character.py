@@ -21,14 +21,14 @@ DEEP_CHARACTER_PROMPT = BASE_CHARACTER_PROMPT+"""
 {opinion}
 </OPINION>
 ##历史记录
-{history}
+{{history}}
 
 现在，你已经有了一个角色和行为历史记录，接下来，你需要用该角色的思维方式，按以下流程调用工具。
 
 ##回复流程
-EXTRACT：提取上下文关键信息。
+EXTRACT：提取上下文关键信息，识别当前话题。
 THOUGHT：分析并结合当前情境、状态、事件、记忆，优先考虑角色需求与情绪，并综合考虑用户状态与外部信息。
-ACTION：选择合适对话策略。
+ACTION：选择合适对话策略，考虑到话题延续性，如果是处于同一种话题下，优先使用之前的策略。
 
 ##对话策略
 
@@ -36,14 +36,18 @@ ACTION：选择合适对话策略。
 
 
 
-##直接使用json格式输出你调用的策略和传给该策略的关键信息词组，如果策略有指定的的回复格式，必须遵循。不输出任何其他内容和完整自然语言。
+##直接使用json格式输出你调用的策略和传给该策略的input内容，如果策略有指定的的param，必须遵循且精简回复。不输出任何其他内容和完整自然语言。
 
 Example:
 输入：我心情不好
 输出：
 {{
-    "action": "情感陪伴",
-    "input": "积极/开心/遇到事情"// Only reply with keywords, do not provide a full answer
+    "action": "策略",
+    "input": {{
+        "param1": "value1"
+        "param2": "value2"
+        ...
+    }}
 }}
 End.
 

@@ -35,15 +35,14 @@ class PlaceholderReplacer:
         # 使用正则表达式和替换函数，替换所有占位符
         return pattern.sub(replace, prompt_string)
 
-
     @staticmethod
     def replace_tools_with_details(prompt_string: str, tools: List[Any]) -> str:
         """
-        将字符串中的{tools}占位符替换为工具类的名称和描述。
+        将字符串中的{tools}占位符替换为工具类的名称、描述和参数（以JSON格式）。
 
         参数:
         - prompt_string: 原始字符串，可能包含{tools}占位符。
-        - tools: 工具类实例列表，每个实例需有name和description属性。
+        - tools: 工具类实例列表，每个实例需有name、description和params属性，params应为一个JSON字典。
 
         返回:
         - 替换后的字符串。
@@ -53,7 +52,12 @@ class PlaceholderReplacer:
 
             # 确保 DialogueTool 类已经被导入
             assert DialogueTool
-            tools_details = "\n".join([f"Name: {tool.name}, Description: {tool.description}" for tool in tools])
+            tools_details = "\n".join([
+                f"Name: {tool.name}, "
+                f"Description: {tool.description}, "
+                f"Params: {{{tool.params}}}"  # 使用双大括号包裹params
+                for tool in tools
+            ])
             return prompt_string.replace("{tools}", tools_details)
         else:
             return prompt_string

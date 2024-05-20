@@ -78,7 +78,7 @@ class CharacterAgent(AbstractAgent):
                 connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
             info_with_opinion =  tuji_info.replace("{opinion}",opinion_memory.buffer(self.uid,10) )
             # 替换历史占位符
-            tuji_info_with_history = info_with_opinion.replace("{history}", self.history.buffer(3))
+            tuji_info_with_history = info_with_opinion.replace("{history}", self.history.buffer(9))
             # 替换工具占位符
             final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
             logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)
@@ -193,7 +193,12 @@ class CharacterAgent(AbstractAgent):
             try:
                 json_output = json.loads(output)
                 logging.info(f"Agent Action: {json_output}")
-                self.history.add_ai_message(json_output["action"] + json_output["input"])
+
+                # 将字典转换为JSON格式的字符串
+                input_str = json.dumps(json_output["input"], ensure_ascii=False)
+
+                message = f"Action: {json_output['action']} - Input: {input_str}"
+                self.history.add_ai_message(message)
                 return json_output
             except json.JSONDecodeError:
                 logging.info("Agent Action: Use FastChain")
