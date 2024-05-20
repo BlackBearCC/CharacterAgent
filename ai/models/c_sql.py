@@ -159,14 +159,14 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
             _messages = self.messages(count)
             history_buffer = ""
 
-            for message in reversed(_messages):
+            for message in _messages:
                 timestamp = datetime.datetime.fromtimestamp(message.created_at).strftime(
                     "%Y-%m-%d %H:%M:%S") if with_timestamps else ""
                 if isinstance(message, HumanMessage):
                     history_buffer += f"{timestamp} 大头哥: {message.content}\n"
                 elif isinstance(message, AIMessage):
                     history_buffer += f"{timestamp} 兔几妹妹: {message.content}\n"
-
+            print(history_buffer.strip())
             return history_buffer.strip()  # 去掉末尾换行符
         except Exception as e:
             logger.error(f"Error occurred while fetching messages: {str(e)}")  # 记录错误日志

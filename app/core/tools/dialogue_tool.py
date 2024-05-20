@@ -18,7 +18,7 @@ from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY, FACT_TRANSFORM_STRATEGY, EXPRESSION_STRATEGY, \
-    INFORMATION_STRATEGY, DEFENSE_STRATEGY, OPINION_STRATEGY, OPINION_STRATEGY_TASK
+    INFORMATION_STRATEGY, DEFENSE_STRATEGY, OPINION_STRATEGY, OPINION_STRATEGY_TASK, REPEAT_STRATEGY
 from utils.placeholder_replacer import PlaceholderReplacer
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -256,11 +256,11 @@ class DefenseTool(DialogueTool):
 class RepeatTool(DialogueTool):
     """重复表达策略"""
     name = "重复表达"
-    description = "当用户表达相同内容时，调侃提醒并表达角色情绪。"
+    description = "用于回复HISTORY中存在出现过的问题，但用户重复输入语意接近的内容，结合ROLE_STATE和对话上下文回应，你必须在reply_instruction中指出重复表达，状态差时会生气"
     params = {
-        "reply_instruction": "回复的关键词"
+        "reply_instruction": "重复的内容||必须提醒用户重复表达&&现在关注的话题或ROLE_STATE"
     }
-    chain = _init_chain(EMOTION_STRATEGY)
+    chain = _init_chain(REPEAT_STRATEGY)
 
     async def strategy(self,uid:str, user_input: str, action_input: str,strategy_history:str = "") -> Callable:
         # 获取当前对话历史记录
