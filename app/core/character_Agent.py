@@ -3,6 +3,7 @@ import json
 from typing import Any, Dict, List, AsyncGenerator
 
 from langchain.memory import ConversationBufferMemory, ConversationStringBufferMemory
+from langchain.memory.prompt import ENTITY_MEMORY_CONVERSATION_TEMPLATE
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
@@ -12,6 +13,7 @@ from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
+from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from utils.placeholder_replacer import PlaceholderReplacer
 
@@ -88,10 +90,15 @@ class CharacterAgent(AbstractAgent):
             replacer = PlaceholderReplacer()
             # 替换配置占位符
             tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
-            #替换角色状态占位符
-            info_with_state = tuji_info.replace("{role_state}", role_state)
-            # 替换观点占位符
 
+            # 替换特殊记忆占位符
+            info_with_special_memory = tuji_info.replace("{special_memory}", "用户的生日是8月19")
+
+            # 替换环境占位符
+            info_with_environment = info_with_special_memory.replace("{environment}", "一个粉嫩的房间里，一个粉嫩的沙发上，一个粉嫩的床，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉")
+            # 替换角色状态占位符
+            info_with_state = info_with_environment.replace("{role_state}", role_state)
+            # 替换观点占位符
             info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(self.uid,10) )
             # 替换历史占位符
             tuji_info_with_history = info_with_opinion.replace("{history}", history)
@@ -240,6 +247,19 @@ class CharacterAgent(AbstractAgent):
             logging.info(f"Agent Fast Chain Output: {final_output}")
             self.history.add_ai_message(final_output)
             pass  # 忽略else块中的pass，避免修改原有代码逻辑
+
+
+        output_parser = StrOutputParser()
+        info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}","大头哥")
+        entity_with_history = info_with_entity.replace("{history}",self.history.buffer(10))
+        entity_with_summary = entity_with_history.replace("{summary}","")
+        entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
+        reflexion_chain = entity_prompt_template | self.llm | output_parser
+        entity_output=""
+        async for chunk in reflexion_chain.astream({"input":""}):
+            entity_output += chunk
+            print(f"{chunk}", end="|", flush=True)
+        logging.info(f"Agent 实体更新: {entity_output}")
 
 
     def perform_task(self, task: str, data: dict) -> int:

@@ -40,7 +40,7 @@ from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
 from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, ExpressionTool, InformationTool, \
-    OpinionTool, DefenseTool, RepeatTool, TopicTool
+    OpinionTool, DefenseTool, RepeatTool, Memory_SearchTool
 from utils.document_processing_tool import DocumentProcessingTool
 from utils.placeholder_replacer import PlaceholderReplacer
 
@@ -110,17 +110,17 @@ retriever = document_util.process_and_build_vector_db()
 
 connection_string = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
 user_database = UserDatabase(connection_string)
-user_database.add_user("test_user", "test_user@example.com")
+# user_database.add_user("test_user", "test_user@example.com")
 
 tools = [
-    EmotionCompanionTool(),
-    FactTransformTool(),
-    ExpressionTool(),
-    InformationTool(),
-    OpinionTool(),
-    DefenseTool(),
-    RepeatTool(),
-    TopicTool(),
+    EmotionCompanionTool(),  # 情感陪伴
+    FactTransformTool(),  # 事实转换
+    ExpressionTool(),  # 表达诉求
+    InformationTool(),  # 信息查找
+    OpinionTool(),  # 观点评价
+    DefenseTool(),  # 防御对话
+    RepeatTool(),  # 重复表达
+    # TopicTool(),  # 话题激发(先不做)
 ]
 chat_message_history = SQLChatMessageHistory(
     session_id="test_session",
@@ -129,8 +129,7 @@ chat_message_history = SQLChatMessageHistory(
 
 history_buffer = chat_message_history.buffer()
 
-# history_buffer = get_prefixed_buffer_string(messages, "大头哥", "兔几妹妹")
-# print(history_buffer)
+
 tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history=chat_message_history)
 
 testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"

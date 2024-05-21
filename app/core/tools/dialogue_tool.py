@@ -133,7 +133,13 @@ class ExpressionTool(DialogueTool):
             final_result += chunk
             yield chunk
 
-
+class Memory_SearchTool(DialogueTool):
+    """记忆回溯策略"""
+    name = "记忆回溯"
+    description = "用于需要回溯记忆的对话，包括但不限于SPECIAL_MEMERY，TOPIC，指定的日期，纪念日等"
+    params = {
+        "reply_instruction": "回复的关键词"
+    }
 
 class InformationTool(DialogueTool):
     """信息查找策略"""
@@ -280,20 +286,20 @@ class RepeatTool(DialogueTool):
 
 
 
-class TopicTool(DialogueTool):
-    """话题激发策略"""
-    name = "话题激发"
-    description = "在对话无聊时，引入用户感兴趣的话题或新的内容。"
-    params = {
-        "reply_instruction": "回复的关键词"
-    }
-    chain = _init_chain(EMOTION_STRATEGY)
-
-    async def strategy(self,uid:str, user_input: str, action_input: str,strategy_history:str = "") -> Callable:
-        # 获取当前对话历史记录
-        final_result = ""
-
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": strategy_history}):
-            final_result += chunk
-            yield chunk
+# class TopicTool(DialogueTool):
+#     """话题激发策略"""
+#     name = "话题激发"
+#     description = "在对话无聊时，引入用户感兴趣的话题或新的内容。"
+#     params = {
+#         "reply_instruction": "回复的关键词"
+#     }
+#     chain = _init_chain(EMOTION_STRATEGY)
+#
+#     async def strategy(self,uid:str, user_input: str, action_input: str,strategy_history:str = "") -> Callable:
+#         # 获取当前对话历史记录
+#         final_result = ""
+#
+#         async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": strategy_history}):
+#             final_result += chunk
+#             yield chunk
 
