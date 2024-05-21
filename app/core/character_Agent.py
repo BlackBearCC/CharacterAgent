@@ -63,7 +63,7 @@ class CharacterAgent(AbstractAgent):
 
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
-        role_state = "'体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着'"
+        role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
         history = self.history.buffer(9)
 
         if avg_score < self.similarity_threshold:
@@ -73,7 +73,7 @@ class CharacterAgent(AbstractAgent):
             info_with_opinion = info_with_state.replace("{opinion}", opinion_memory.buffer(self.uid, 10))
             info_with_history = info_with_opinion.replace("{history}", history)
 
-            logging.info("Agent FastChain 动态信息填充:", info_with_history)
+            print("Agent FastChain 动态信息填充:", info_with_history)
 
             prompt_template = PromptTemplate(template=info_with_history, input_variables=["classic_scenes", "input"])
             output_parser = StrOutputParser()

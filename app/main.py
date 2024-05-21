@@ -58,6 +58,7 @@ app = FastAPI()
 class SSLFilter(logging.Filter):
     def filter(self, record):
         message = record.getMessage()
+
         if 'SSLError' in message:
             return False
         return True

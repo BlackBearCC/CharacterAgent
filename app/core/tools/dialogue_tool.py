@@ -153,10 +153,18 @@ class InformationTool(DialogueTool):
                 if resp.status == 200:
                     response_content = await resp.json()
                     print(f"HTTP Response: {response_content}")
-                    information_with_data = INFORMATION_STRATEGY.replace(
-                        "{information}",
-                        ", ".join(response_content["data"])
-                    )
+                    # 获取数据
+                    data_list = response_content["data"]
+                    data_dicts = [item for item in data_list]  # 将数据转化为字典列表
+
+                    # 拼接字符串
+                    data_pairs = []
+                    for data_dict in data_dicts:
+                        for key, value in data_dict.items():
+                            data_pairs.append(f"{key}={value}")
+
+                    # 拼接成一个字符串
+                    information_with_data = INFORMATION_STRATEGY.replace("{information}", ", ".join(data_pairs))
 
                     print("InformationStrategy:", information_with_data)
                     llm = Tongyi(model_name="qwen-max", top_p=0.4,
@@ -167,7 +175,7 @@ class InformationTool(DialogueTool):
                     final_result = ""
 
                     async for chunk in chain.astream(
-                            {"input": user_input, "action_input": response_content, "history": strategy_history}):
+                            {"input": user_input, "action_input": information_with_data, "history": strategy_history}):
                         final_result += chunk
                         yield chunk
 
