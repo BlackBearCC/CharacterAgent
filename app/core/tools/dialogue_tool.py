@@ -52,7 +52,7 @@ def _init_chain(strategy_name,llm=None):
 
     replacer = PlaceholderReplacer()
     # 加载JSON配置文件
-    with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
+    with open('ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     base_strategy = replacer.replace_dict_placeholders(BASE_STRATEGY_PROMPT, config)
     # base_strategy_with_history = base_strategy.replace("{history}", history)

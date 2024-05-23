@@ -25,9 +25,10 @@ import os
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sse_starlette import EventSourceResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from ai.models import QianwenModel
+
 from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
@@ -36,6 +37,7 @@ from ai.models.user import UserDatabase
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
+from app.api.models import ChatRequest
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -67,7 +69,7 @@ class SSLFilter(logging.Filter):
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[RotatingFileHandler('app.log', maxBytes=10000, backupCount=5)]
+    handlers=[RotatingFileHandler('app/app.log', maxBytes=10000, backupCount=5)]
 )
 
 # 配置requests的日志级别
@@ -80,10 +82,9 @@ handler.addFilter(SSLFilter())
 
 
 
-model = QianwenModel()
 
 # 加载JSON配置文件
-with open('../ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
+with open('ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
 replacer = PlaceholderReplacer()
@@ -95,18 +96,8 @@ print(tuji_info)
 llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
 
-
-
-document_util = DocumentProcessingTool("../ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
+document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = document_util.process_and_build_vector_db()
-
-# base_strategy = replacer.replace_dict_placeholders(BASE_STRATEGY_PROMPT, config)
-# base_strategy_template = base_strategy.replace("{answer_tendency}", EMOTION_STRATEGY)
-# emotion_template = PromptTemplate(template=base_strategy_template, input_variables=[ "input"])
-#
-# logging.info(emotion_template)
-# output_parser = StrOutputParser()
-# emotion_chain = emotion_template | llm | output_parser
 
 connection_string = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
 user_database = UserDatabase(connection_string)
@@ -133,26 +124,31 @@ history_buffer = chat_message_history.buffer()
 tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history=chat_message_history)
 
 testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
-async def main():
 
-    # 创建对话历史记录内存对象
-    memory = ConversationBufferMemory(human_prefix="大头哥", ai_prefix="兔几妹妹")
-    while True:
-        user_input = input("请输入你的消息：")
-        if user_input.lower() == "退出":
-            break
-        await tuji_agent.response(uid=testuid,input_text=user_input)
-        # message_strings = [str(message) for message in chat_message_history.messages(20)]
-        # logging.info("当前对话历史记录：" + ", ".join(message_strings))
-    # 获取消息列表
+async def chat_event_generator(uid, input_text):
+
+    async for response_chunk in tuji_agent.response(uid=uid, input_text=input_text):
+        yield f"data: {response_chunk}\n\n"
+
+@app.post("/chat")
+async def generate(request: ChatRequest):
+    return EventSourceResponse(chat_event_generator(request.uid, request.input))
+
+# async def main():
+#
+#     # 创建对话历史记录内存对象
+#     memory = ConversationBufferMemory(human_prefix="大头哥", ai_prefix="兔几妹妹")
+#     while True:
+#         user_input = input("请输入你的消息：")
+#         if user_input.lower() == "退出":
+#             break
+#         await tuji_agent.response(uid=testuid,input_text=user_input)
+#
+#
+# asyncio.run(main())
 
 
-    # async for chunk in chain.astream("你好啊？"):
-    #
-    #     print(chunk, end="|", flush=True)
 
-
-asyncio.run(main())
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
