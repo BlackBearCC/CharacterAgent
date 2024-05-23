@@ -13,6 +13,7 @@ from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
+from ai.prompts.game_function import WRITE_DIARY_PROMPT
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from data.database.mysql.entity import EntityMemory, Entity
@@ -21,7 +22,7 @@ from utils.placeholder_replacer import PlaceholderReplacer
 import logging
 class CharacterAgent(AbstractAgent):
 
-    def __init__(self, character_info: str,retriever, document_util, llm,tools,history:SQLChatMessageHistory):
+    def __init__(self, base_info:str,character_info: str,retriever, document_util, llm,tools,history:SQLChatMessageHistory):
         self.character_info = character_info
         self.llm = llm
 
@@ -35,7 +36,7 @@ class CharacterAgent(AbstractAgent):
         self.document_util = document_util
         self.llm = llm
         self.similarity_threshold = 0.38
-
+        self.base_info = base_info
 
 
         # 加载JSON配置文件
@@ -43,6 +44,11 @@ class CharacterAgent(AbstractAgent):
             config = json.load(f)
 
         self.config = config
+
+        replacer = PlaceholderReplacer()
+
+        # 替换配置占位符
+        self.tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
 
         self.history: SQLChatMessageHistory = history
 
@@ -88,12 +94,12 @@ class CharacterAgent(AbstractAgent):
             print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
             docs = [doc for doc, _ in docs_and_scores]
             output_parser = StrOutputParser()
-            replacer = PlaceholderReplacer()
-            # 替换配置占位符
-            tuji_info = replacer.replace_dict_placeholders(DEEP_CHARACTER_PROMPT, self.config)
+
+
+
 
             # 替换特殊记忆占位符
-            info_with_special_memory = tuji_info.replace("{special_memory}", "用户的生日是8月19")
+            info_with_special_memory = self.tuji_info.replace("{special_memory}", "用户的生日是8月19")
 
             # 替换环境占位符
             info_with_environment = info_with_special_memory.replace("{environment}", "一个粉嫩的房间里，一个粉嫩的沙发上，一个粉嫩的床，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉")
@@ -104,6 +110,7 @@ class CharacterAgent(AbstractAgent):
             # 替换历史占位符
             tuji_info_with_history = info_with_opinion.replace("{history}", history)
             # 替换工具占位符
+            replacer = PlaceholderReplacer()
             final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
             logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)
 
@@ -275,6 +282,19 @@ class CharacterAgent(AbstractAgent):
         entity_memory.save_entity(self.uid,entity)
         logging.info(f"Agent 实体更新: {entity}")
         #
+    async def write_diary(self,uid:str,date: str) -> AsyncGenerator[str, None]:
+         # 替换配置占位符
+        info_with_role = WRITE_DIARY_PROMPT.replace("{role}",self.base_info)
+        info_with_name = info_with_role.replace("{user}", "大头哥").replace("{char}", "兔兔")
+        logging.info(f"Agent Write Diary: {info_with_name}")
+        prompt_template = PromptTemplate(template=info_with_name, input_variables=[ "history"])
+        output_parser = StrOutputParser()
+        diary_chain =  prompt_template | self.llm | output_parser
+        async for chunk in diary_chain.astream({"history":self.history.buffer(10)}):
+            yield chunk
+
+
+
 
     def perform_task(self, task: str, data: dict) -> int:
         return 200

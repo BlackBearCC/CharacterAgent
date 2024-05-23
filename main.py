@@ -34,10 +34,11 @@ from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
 from ai.models.role_memory import OpinionMemory
 from ai.models.user import UserDatabase
+from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
-from app.api.models import ChatRequest
+from app.api.models import ChatRequest, WriteDiary
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -120,8 +121,8 @@ chat_message_history = SQLChatMessageHistory(
 
 history_buffer = chat_message_history.buffer()
 
-
-tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history=chat_message_history)
+base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
+tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history=chat_message_history)
 
 testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
 
@@ -133,6 +134,18 @@ async def chat_event_generator(uid, input_text):
 @app.post("/chat")
 async def generate(request: ChatRequest):
     return EventSourceResponse(chat_event_generator(request.uid, request.input))
+
+
+async def write_diary_event_generator(uid, date):
+    async for response_chunk in tuji_agent.write_diary(uid=uid,date=date):
+        yield f"data: {response_chunk}\n\n"
+
+
+@app.post("/write_diary")
+async def write_diary (request: WriteDiary):
+
+    return EventSourceResponse(write_diary_event_generator(request.uid, request.date))
+
 
 # async def main():
 #
