@@ -15,6 +15,7 @@ from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from app.core.abstract_Agent import AbstractAgent
+from data.database.mysql.entity import EntityMemory, Entity
 from utils.placeholder_replacer import PlaceholderReplacer
 
 import logging
@@ -248,18 +249,28 @@ class CharacterAgent(AbstractAgent):
             self.history.add_ai_message(final_output)
             pass  # 忽略else块中的pass，避免修改原有代码逻辑
 
+        entity_memory = EntityMemory(
+            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
 
+        entity = entity_memory.get_entity(self.uid)
         output_parser = StrOutputParser()
-        info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}","大头哥")
+
+        print(entity)
+        if entity is None:
+            entity = Entity(entity="大头哥",summary="是个大头",user_guid=self.uid)
+
+        info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
         entity_with_history = info_with_entity.replace("{history}",self.history.buffer(10))
-        entity_with_summary = entity_with_history.replace("{summary}","")
+        entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
         entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
         reflexion_chain = entity_prompt_template | self.llm | output_parser
         entity_output=""
         async for chunk in reflexion_chain.astream({"input":""}):
             entity_output += chunk
             print(f"{chunk}", end="|", flush=True)
-        logging.info(f"Agent 实体更新: {entity_output}")
+        entity.summary = entity_output
+        entity_memory.save_entity(self.uid,entity)
+        logging.info(f"Agent 实体更新: {entity}")
 
 
     def perform_task(self, task: str, data: dict) -> int:

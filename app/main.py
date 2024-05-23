@@ -135,7 +135,6 @@ tuji_agent = CharacterAgent(character_info=tuji_info, llm=llm, retriever=retriev
 testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
 async def main():
 
-
     # 创建对话历史记录内存对象
     memory = ConversationBufferMemory(human_prefix="大头哥", ai_prefix="兔几妹妹")
     while True:
