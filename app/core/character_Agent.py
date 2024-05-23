@@ -208,71 +208,72 @@ class CharacterAgent(AbstractAgent):
             final_output += chunk
             yield chunk
             # print(chunk, end="|", flush=True)
-        #
-        # def handle_output(output):
-        #     """
-        #     处理检索链的输出，尝试将其解析为JSON，失败则视为普通文本输出。
-        #
-        #     :param output: 检索链的输出文本。
-        #     :return: 解析后的JSON对象或原始文本。
-        #     """
-        #     try:
-        #         json_output = json.loads(output)
-        #         logging.info(f"Agent Action: {json_output}")
-        #
-        #         # 将字典转换为JSON格式的字符串
-        #         # input_str = json.dumps(json_output["input"], ensure_ascii=False)
-        #         concatenated_values = ''
-        #         for key, value in json_output["input"].items():
-        #             # 拼接键值
-        #             concatenated_values += f"{key}={value}"+','
-        #
-        #
-        #         message = f"Action: {json_output['action']} - Input: {concatenated_values}"
-        #         self.history.add_ai_message(message)
-        #         return json_output
-        #     except json.JSONDecodeError:
-        #         logging.info("Agent Action: Use FastChain")
-        #         return output
-        #
-        # final_json_output = handle_output(final_output)  # 处理最终的检索链输出
-        #
-        # if isinstance(final_json_output, dict):
-        #     strategy_output = ""
-        #     # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
-        #     async for chunk in await self.route_post_deep_chain(final_json_output):
-        #         strategy_output += chunk
-        #         print(f"{chunk}", end="|", flush=True)
-        #     logging.info(f"Agent Deep Chain Output: {strategy_output}")
-        #     self.history.add_ai_message(strategy_output)
-        # else:
-        #     # 如果输出不是字典，则视为快速链输出
-        #     logging.info(f"Agent Fast Chain Output: {final_output}")
-        #     self.history.add_ai_message(final_output)
-        #     pass  # 忽略else块中的pass，避免修改原有代码逻辑
-        #
-        # entity_memory = EntityMemory(
-        #     connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
-        #
-        # entity = entity_memory.get_entity(self.uid)
-        # output_parser = StrOutputParser()
-        #
-        # print(entity)
-        # if entity is None:
-        #     entity = Entity(entity="大头哥",summary="是个大头",user_guid=self.uid)
-        #
-        # info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
-        # entity_with_history = info_with_entity.replace("{history}",self.history.buffer(10))
-        # entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
-        # entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
-        # reflexion_chain = entity_prompt_template | self.llm | output_parser
-        # entity_output=""
-        # async for chunk in reflexion_chain.astream({"input":""}):
-        #     entity_output += chunk
-        #     print(f"{chunk}", end="|", flush=True)
-        # entity.summary = entity_output
-        # entity_memory.save_entity(self.uid,entity)
-        # logging.info(f"Agent 实体更新: {entity}")
+
+        def handle_output(output):
+            """
+            处理检索链的输出，尝试将其解析为JSON，失败则视为普通文本输出。
+
+            :param output: 检索链的输出文本。
+            :return: 解析后的JSON对象或原始文本。
+            """
+            try:
+                json_output = json.loads(output)
+                logging.info(f"Agent Action: {json_output}")
+
+                # 将字典转换为JSON格式的字符串
+                # input_str = json.dumps(json_output["input"], ensure_ascii=False)
+                concatenated_values = ''
+                for key, value in json_output["input"].items():
+                    # 拼接键值
+                    concatenated_values += f"{key}={value}"+','
+
+
+                message = f"Action: {json_output['action']} - Input: {concatenated_values}"
+                self.history.add_ai_message(message)
+                return json_output
+            except json.JSONDecodeError:
+                logging.info("Agent Action: Use FastChain")
+                return output
+
+        final_json_output = handle_output(final_output)  # 处理最终的检索链输出
+
+        if isinstance(final_json_output, dict):
+            strategy_output = ""
+            # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
+            async for chunk in await self.route_post_deep_chain(final_json_output):
+                strategy_output += chunk
+                # print(f"{chunk}", end="|", flush=True)
+                yield chunk
+            # logging.info(f"Agent Deep Chain Output: {strategy_output}")
+            self.history.add_ai_message(strategy_output)
+        else:
+            # 如果输出不是字典，则视为快速链输出
+            logging.info(f"Agent Fast Chain Output: {final_output}")
+            self.history.add_ai_message(final_output)
+            pass  # 忽略else块中的pass，避免修改原有代码逻辑
+
+        entity_memory = EntityMemory(
+            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
+
+        entity = entity_memory.get_entity(self.uid)
+        output_parser = StrOutputParser()
+
+        print(entity)
+        if entity is None:
+            entity = Entity(entity="大头哥",summary="是个大头",user_guid=self.uid)
+
+        info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
+        entity_with_history = info_with_entity.replace("{history}",self.history.buffer(10))
+        entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
+        entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
+        reflexion_chain = entity_prompt_template | self.llm | output_parser
+        entity_output=""
+        async for chunk in reflexion_chain.astream({"input":""}):
+            entity_output += chunk
+            print(f"{chunk}", end="|", flush=True)
+        entity.summary = entity_output
+        entity_memory.save_entity(self.uid,entity)
+        logging.info(f"Agent 实体更新: {entity}")
         #
 
     def perform_task(self, task: str, data: dict) -> int:
