@@ -157,7 +157,15 @@ async def event_generator(uid, event):
 
 @app.post("/event_response")
 async def event_response(request: EventRequest):
-    return EventSourceResponse(event_generator(request.uid, request.event))
+    event = (f"事件来源: {request.event_from},"
+             f"动作：{request.action}，"
+             f"动作对象：{request.action_object}，"
+             f"对象描述：{request.object_description}，"
+             f"对象反馈：{request.object_feedback}，"
+             f"角色状态：{request.role_statu}，"
+             f"预期角色反应：{request.anticipatory_reaction}")
+
+    return EventSourceResponse(event_generator(request.uid, event))
 
 
 # async def main():
