@@ -97,7 +97,7 @@ print(tuji_info)
 llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
 
-document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
+document_util = DocumentProcessingTool("/app/ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = document_util.process_and_build_vector_db()
 
 connection_string = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
@@ -143,8 +143,13 @@ async def write_diary_event_generator(uid, date):
 
 @app.post("/write_diary")
 async def write_diary (request: WriteDiary):
-
     return EventSourceResponse(write_diary_event_generator(request.uid, request.date))
+
+@app.post("/login_event")
+async def login_event(request: ChatRequest):
+    return EventSourceResponse(chat_event_generator(request.uid, request.input))
+
+
 
 
 # async def main():
