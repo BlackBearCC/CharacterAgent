@@ -23,18 +23,18 @@ from utils.placeholder_replacer import PlaceholderReplacer
 import logging
 class CharacterAgent(AbstractAgent):
 
-    def __init__(self, base_info:str,character_info: str,retriever, document_util, llm,tools,history:SQLChatMessageHistory):
+    def __init__(self, base_info:str,character_info: str,vector_db,retriever, llm,tools,history:SQLChatMessageHistory):
         self.character_info = character_info
         self.llm = llm
 
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
         self.tools = tools
-
+        self.vector_db = vector_db
 
 
         self.retriever = retriever
-        self.document_util = document_util
+
         self.llm = llm
         self.similarity_threshold = 0.38
         self.base_info = base_info
@@ -65,7 +65,7 @@ class CharacterAgent(AbstractAgent):
 
 
     async def rute_retriever(self, query):
-        docs_and_scores = self.document_util.vectordb.similarity_search_with_score(query=query, k=3)
+        docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
         print(docs_and_scores)
 
         scores = [score for _, score in docs_and_scores]

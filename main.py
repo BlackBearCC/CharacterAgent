@@ -6,37 +6,29 @@ import re
 from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI
-from langchain.agents import initialize_agent, AgentOutputParser, AgentExecutor, create_react_agent
-from langchain.chains import LLMChain
-from langchain.memory import ConversationBufferMemory
-from langchain.output_parsers import StructuredOutputParser
+
 from langchain.text_splitter import CharacterTextSplitter
 
 
-from langchain_community.document_loaders import TextLoader
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+
+from langchain_community.embeddings import HuggingFaceBgeEmbeddings, HuggingFaceEmbeddings
 from langchain_community.llms.tongyi import Tongyi
 from langchain_community.vectorstores.chroma import Chroma
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, \
-    ChatPromptTemplate
+
 import os
 
-from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sse_starlette import EventSourceResponse
-from starlette.middleware.sessions import SessionMiddleware
 
 
-from ai.models.buffer import get_prefixed_buffer_string
+
+
 from ai.models.c_sql import SQLChatMessageHistory
-from ai.models.embedding.re_HuggingFaceBgeEmbeddings import ReHuggingFaceBgeEmbeddings
-from ai.models.role_memory import OpinionMemory
+
 from ai.models.user import UserDatabase
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
-from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
-from ai.prompts.default_strategy import EMOTION_STRATEGY
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
 from app.api.models import ChatRequest, WriteDiary, EventRequest
 from app.core import CharacterAgent
@@ -44,7 +36,7 @@ from langchain_community.document_loaders import DirectoryLoader
 
 from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, ExpressionTool, InformationTool, \
     OpinionTool, DefenseTool, RepeatTool, Memory_SearchTool
-from utils.document_processing_tool import DocumentProcessingTool
+
 from utils.placeholder_replacer import PlaceholderReplacer
 
 
@@ -97,9 +89,29 @@ print(tuji_info)
 llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
 
-# document_util = DocumentProcessingTool("/app/ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
-document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
-retriever = document_util.process_and_build_vector_db()
+
+file_path = "ai/knowledge/conversation_sample"
+
+# 加载文档
+loader = DirectoryLoader(file_path, glob="**/*.txt", show_progress=True,
+                                 use_multithreading=True)
+documents = loader.load()
+
+# 分割文档为片段
+text_splitter = CharacterTextSplitter(chunk_size=100, chunk_overlap=20)
+docs = text_splitter.split_documents(documents)
+
+embedding_model = "thenlper/gte-small-zh"
+# 创建嵌入模型
+embedding_model = HuggingFaceEmbeddings(model_name=embedding_model, model_kwargs={'device': "cpu"},
+                                                encode_kwargs={'normalize_embeddings': True})
+
+# 构建向量数据库
+vectordb = Chroma.from_documents(documents=docs, embedding=embedding_model)
+
+
+# document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
+retriever = vectordb.as_retriever()
 
 connection_string = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
 user_database = UserDatabase(connection_string)
@@ -123,7 +135,7 @@ chat_message_history = SQLChatMessageHistory(
 history_buffer = chat_message_history.buffer()
 
 base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
-tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm, retriever=retriever, document_util=document_util,tools=tools,history=chat_message_history)
+tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
 
 testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
 
