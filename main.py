@@ -38,7 +38,7 @@ from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
-from app.api.models import ChatRequest, WriteDiary
+from app.api.models import ChatRequest, WriteDiary, EventRequest
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -97,7 +97,8 @@ print(tuji_info)
 llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
 
-document_util = DocumentProcessingTool("/app/ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
+# document_util = DocumentProcessingTool("/app/ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
+document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = document_util.process_and_build_vector_db()
 
 connection_string = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
@@ -145,11 +146,18 @@ async def write_diary_event_generator(uid, date):
 async def write_diary (request: WriteDiary):
     return EventSourceResponse(write_diary_event_generator(request.uid, request.date))
 
-@app.post("/login_event")
-async def login_event(request: ChatRequest):
-    return EventSourceResponse(chat_event_generator(request.uid, request.input))
+# @app.post("/login_event")
+# async def login_event(request: ChatRequest):
+#     return EventSourceResponse(chat_event_generator(request.uid, request.input))
+
+async def event_generator(uid, event):
+    async for response_chunk in tuji_agent.event_response(uid=uid,event=event):
+        yield f"data: {response_chunk}\n\n"
 
 
+@app.post("/event_response")
+async def event_response(request: EventRequest):
+    return EventSourceResponse(event_generator(request.uid, request.event))
 
 
 # async def main():

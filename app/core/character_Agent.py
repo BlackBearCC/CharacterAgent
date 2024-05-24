@@ -4,6 +4,7 @@ from typing import Any, Dict, List, AsyncGenerator
 
 from langchain.memory import ConversationBufferMemory, ConversationStringBufferMemory
 from langchain.memory.prompt import ENTITY_MEMORY_CONVERSATION_TEMPLATE
+from langchain_community.llms.tongyi import Tongyi
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
@@ -13,7 +14,7 @@ from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
-from ai.prompts.game_function import WRITE_DIARY_PROMPT
+from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from data.database.mysql.entity import EntityMemory, Entity
@@ -292,6 +293,17 @@ class CharacterAgent(AbstractAgent):
         diary_chain =  prompt_template | self.llm | output_parser
         async for chunk in diary_chain.astream({"history":self.history.buffer(10)}):
             yield chunk
+
+    async def event_response(self,uid:str,event: str) -> AsyncGenerator[str, None]:
+        llm = Tongyi(model_name="qwen-turbo", top_p=0.4, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+        info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
+        info_with_history = info_with_role.replace("{history}",self.history.buffer(10))
+        prompt_template = PromptTemplate(template=info_with_history, input_variables=["event"])
+        output_parser = StrOutputParser()
+        event_chain = prompt_template | llm | output_parser
+        async for chunk in event_chain.astream({"event":event}):
+            yield chunk
+
 
 
 

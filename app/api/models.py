@@ -12,3 +12,7 @@ class ChatRequest(BaseModel):
 class WriteDiary(BaseModel):
     uid: str  # 数据模型
     date:  Optional[str] = None # 日期
+
+class EventRequest(BaseModel):
+    uid: str  # 数据模型
+    event: str # 事件
