@@ -15,10 +15,12 @@ class WriteDiary(BaseModel):
 
 class EventRequest(BaseModel):
     uid: str  # 用户id
-    event_from: str # 事件发起人
-    action: str  # 发起人动作
-    action_object: str  # 动作对象
-    object_description: Optional[str] = None  # 对象描述
-    object_feedback: Optional[str] = None  # 对象反馈
+    need_response:str  # 是否需要回复
+    create_at:  Optional[str] = None
+    event_location:  Optional[str] = None
     role_statu: Optional[str] = None  # 角色状态
-    anticipatory_reaction: Optional[str] = None  # 预期反应
+    event_type: str # 事件类型
+    event_name: str # 事件
+    event_description: Optional[str] = None  # 事件描述
+    event_feedback: Optional[str] = None  # 事件反馈
+    anticipatory_reaction: Optional[str] = None  # 预期Ai反应

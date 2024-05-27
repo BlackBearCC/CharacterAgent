@@ -19,6 +19,9 @@ from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from data.database.mysql.entity import EntityMemory, Entity
 from utils.placeholder_replacer import PlaceholderReplacer
+from langchain_community.llms import Ollama
+
+
 
 import logging
 class CharacterAgent(AbstractAgent):
@@ -36,6 +39,8 @@ class CharacterAgent(AbstractAgent):
         self.retriever = retriever
 
         self.llm = llm
+
+        self.fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
         self.similarity_threshold = 650
         self.base_info = base_info
 
@@ -83,12 +88,15 @@ class CharacterAgent(AbstractAgent):
             info_with_opinion = info_with_state.replace("{opinion}", opinion_memory.buffer(self.uid, 10))
             info_with_history = info_with_opinion.replace("{history}", history)
 
-            print("Agent FastChain 动态信息填充:", info_with_history)
+            # print("Agent FastChain 动态信息填充:", info_with_history)
 
             prompt_template = PromptTemplate(template=info_with_history, input_variables=["classic_scenes", "input"])
             output_parser = StrOutputParser()
             setup_and_retrieval = RunnableParallel({"classic_scenes": self.retriever, "input": RunnablePassthrough()})
-            fast_chain = setup_and_retrieval | prompt_template | self.llm | output_parser
+            fast_chain = setup_and_retrieval | prompt_template | self.fast_llm | output_parser
+            async for chunk in fast_chain.astream(self.user_input):
+                print(chunk)
+
             return fast_chain
 
         else:
@@ -274,7 +282,7 @@ class CharacterAgent(AbstractAgent):
         entity_with_history = info_with_entity.replace("{history}",self.history.buffer(10))
         entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
         entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
-        reflexion_chain = entity_prompt_template | self.llm | output_parser
+        reflexion_chain = entity_prompt_template | self.fast_llm | output_parser
         entity_output=""
         async for chunk in reflexion_chain.astream({"input":""}):
             entity_output += chunk

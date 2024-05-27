@@ -12,6 +12,7 @@ from langchain.text_splitter import CharacterTextSplitter
 
 
 from langchain_community.embeddings import  OllamaEmbeddings
+from langchain_community.llms.ollama import Ollama
 from langchain_community.llms.tongyi import Tongyi
 from langchain_community.vectorstores import Milvus
 
@@ -74,9 +75,15 @@ requests_log.setLevel(logging.CRITICAL)
 handler = logging.root.handlers[0]
 handler.addFilter(SSLFilter())
 
+query = """Tell me a jokeapplication/x-ndjson (NDJSON 或 newline-delimited JSON) 是一种数据格式，用于在HTTP响应或流式传输中发送多个JSON对象。这种格式的特点是每个完整的JSON对象之间用换行符分隔，而不是像普通的JSON数组那样包含在一个大括号中。由于每个对象都是独立的，因此可以逐行解析和处理，而不需要等待整个响应完成。
+当服务器以application/x-ndjson格式发送数据时，的确会按顺序逐行发送。这意味着客户端可以一边接收数据，一边处理每一行，而无需等待所有数据到达。这对于处理大量数据或者实时流数据非常有用，因为它允许数据的即时处理和较低的内存占用。
+如果你遇到服务器似乎只在完全输出完才返回内容的情况，可能有以下几个原因："""
+from langchain_community.llms import Ollama
 
-
-
+print("fast_llm=================================================")
+# fast_llm = Ollama(model="qwen:32b",temperature=0.5,base_url="http://182.254.242.30:11434")
+# for chunks in fast_llm.stream(query):
+#     print(chunks, end="",flush=True)
 # 加载JSON配置文件
 with open('ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
@@ -84,7 +91,7 @@ with open('ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
 replacer = PlaceholderReplacer()
 # 使用函数替换占位符，生成填充后的提示字符串
 tuji_info = replacer.replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
-print(tuji_info)
+
 
 # 初始化通义模型
 llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
@@ -195,18 +202,36 @@ async def event_generator(uid, event):
     async for response_chunk in tuji_agent.event_response(uid=uid,event=event):
         yield f"data: {response_chunk}\n\n"
 
+fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
+@app.post("/chat_test")
+async def generate(request: ChatRequest):
+
+    url = 'http://182.254.242.30:11434/api/generate'
+    data = {'model': 'qwen:14b', 'prompt': '为什么天空是蓝色，大象有鼻子'}
+
+    async def sse_generator():
+        for chunks in fast_llm.stream(request.input):
+            yield f"data: {chunks}\n\n"
+
+    return EventSourceResponse(sse_generator())
 
 @app.post("/event_response")
 async def event_response(request: EventRequest):
-    event = (f"事件来源: {request.event_from},"
-             f"动作：{request.action}，"
-             f"动作对象：{request.action_object}，"
-             f"对象描述：{request.object_description}，"
-             f"对象反馈：{request.object_feedback}，"
-             f"角色状态：{request.role_statu}，"
-             f"预期角色反应：{request.anticipatory_reaction}")
 
-    return EventSourceResponse(event_generator(request.uid, event))
+    if request.need_response == "true":
+        event = (
+            f"角色状态：{request.role_statu}，"
+            f"事件: {request.event_name},"
+            f"发生时间：{request.create_at}，"
+            f"发生地点：{request.event_location}，"
+            f"事件详情：{request.event_description}，"
+            f"事件反馈：{request.event_feedback}，"
+            f"预期角色反应：{request.anticipatory_reaction}")
+
+        return EventSourceResponse(event_generator(request.uid, event))
+
+
+
 
 
 # async def main():
