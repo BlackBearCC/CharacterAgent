@@ -11,11 +11,10 @@ from langchain.text_splitter import CharacterTextSplitter
 
 
 
-from langchain_community.embeddings import  OllamaEmbeddings
+from langchain_community.embeddings import OllamaEmbeddings, ModelScopeEmbeddings
 from langchain_community.llms.ollama import Ollama
 from langchain_community.llms.tongyi import Tongyi
-from langchain_community.vectorstores import Milvus
-
+from langchain_community.vectorstores import Milvus, Chroma
 
 import os
 
@@ -110,24 +109,24 @@ text_splitter = CharacterTextSplitter(chunk_size=100, chunk_overlap=20)
 docs = text_splitter.split_documents(documents)
 
 # embedding_model = "thenlper/gte-small-zh"
-# embedding_model = "iic/nlp_gte_sentence-embedding_chinese-small"
-embedding_model = "milkey/gte:large-zh-f16"
+embedding_model = "iic/nlp_gte_sentence-embedding_chinese-small"
+# embedding_model = "milkey/gte:large-zh-f16"
 # 创建嵌入模型
 # embedding_model = HuggingFaceEmbeddings(model_name=embedding_model, model_kwargs={'device': "cpu"},
 #                                                 encode_kwargs={'normalize_embeddings': True})
-# embeddings = ModelScopeEmbeddings(model_id=embedding_model)
-embeddings = OllamaEmbeddings(base_url= "http://182.254.242.30:11434", model=embedding_model, temperature=0.5,)
+embeddings = ModelScopeEmbeddings(model_id=embedding_model)
+# embeddings = OllamaEmbeddings(base_url= "http://182.254.242.30:11434", model=embedding_model, temperature=0.5,)
 
 # 构建向量数据库
-# vectordb = Chroma.from_documents(documents=docs, embedding=embedding_model)
+vectordb = Chroma.from_documents(documents=docs, embedding=embeddings)
 
-vectordb = Milvus.from_documents(
-    docs,
-    embeddings,
-    collection_name="my_collection2",
-    connection_args={"host": "182.254.242.30", "port": "19530"},
-
-)
+# vectordb = Milvus.from_documents(
+#     docs,
+#     embeddings,
+#     collection_name="my_collection2",
+#     connection_args={"host": "182.254.242.30", "port": "19530"},
+#
+# )
 # vectordb = Milvus(
 #     embedding_function=embeddings,
 #     collection_name="my_collection",
@@ -167,21 +166,28 @@ chat_message_history = SQLChatMessageHistory(
     session_id="test_session",
     connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
 )
+fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
+# fast_llm_7b = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
+
 
 history_buffer = chat_message_history.buffer()
 
 base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
-tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
+tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm,fast_llm=fast_llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
 
 testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
+
+
 
 async def chat_event_generator(uid, input_text):
 
     async for response_chunk in tuji_agent.response(uid=uid, input_text=input_text):
+        print(response_chunk,end="",flush=True)
         yield f"data: {response_chunk}\n\n"
 
 @app.post("/chat")
 async def generate(request: ChatRequest):
+    logging.info(f"用户输入：{request.input}")
     return EventSourceResponse(chat_event_generator(request.uid, request.input))
 
 
@@ -202,19 +208,20 @@ async def event_generator(uid, event):
     async for response_chunk in tuji_agent.event_response(uid=uid,event=event):
         yield f"data: {response_chunk}\n\n"
 
-fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
+
 @app.post("/chat_test")
 async def generate(request: ChatRequest):
 
     url = 'http://182.254.242.30:11434/api/generate'
     data = {'model': 'qwen:14b', 'prompt': '为什么天空是蓝色，大象有鼻子'}
-
+    fast_llm = Ollama(model="qwen:14b", temperature=0.5, base_url="http://182.254.242.30:11434")
     async def sse_generator():
         for chunks in fast_llm.stream(request.input):
+            print(chunks,end="",flush=True)
             yield f"data: {chunks}\n\n"
 
+    # return EventSourceResponse(chat_event_generator(request.uid, request.input))
     return EventSourceResponse(sse_generator())
-
 @app.post("/event_response")
 async def event_response(request: EventRequest):
 

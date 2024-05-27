@@ -26,7 +26,8 @@ from langchain_community.llms import Ollama
 import logging
 class CharacterAgent(AbstractAgent):
 
-    def __init__(self, base_info:str,character_info: str,vector_db,retriever, llm,tools,history:SQLChatMessageHistory):
+    def __init__(self,
+                 base_info:str,character_info: str,vector_db,retriever, llm,fast_llm,tools,history:SQLChatMessageHistory):
         self.character_info = character_info
         self.llm = llm
 
@@ -34,14 +35,15 @@ class CharacterAgent(AbstractAgent):
 
         self.tools = tools
         self.vector_db = vector_db
+        self.fast_llm= fast_llm
 
 
         self.retriever = retriever
 
         self.llm = llm
 
-        self.fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
-        self.similarity_threshold = 650
+
+        self.similarity_threshold = 0.45
         self.base_info = base_info
 
 
@@ -94,8 +96,6 @@ class CharacterAgent(AbstractAgent):
             output_parser = StrOutputParser()
             setup_and_retrieval = RunnableParallel({"classic_scenes": self.retriever, "input": RunnablePassthrough()})
             fast_chain = setup_and_retrieval | prompt_template | self.fast_llm | output_parser
-            async for chunk in fast_chain.astream(self.user_input):
-                print(chunk)
 
             return fast_chain
 
