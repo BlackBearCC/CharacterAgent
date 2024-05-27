@@ -36,7 +36,7 @@ class CharacterAgent(AbstractAgent):
         self.retriever = retriever
 
         self.llm = llm
-        self.similarity_threshold = 0.38
+        self.similarity_threshold = 650
         self.base_info = base_info
 
 

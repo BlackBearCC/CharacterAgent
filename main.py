@@ -11,9 +11,10 @@ from langchain.text_splitter import CharacterTextSplitter
 
 
 
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings, HuggingFaceEmbeddings
+from langchain_community.embeddings import  OllamaEmbeddings
 from langchain_community.llms.tongyi import Tongyi
-from langchain_community.vectorstores.chroma import Chroma
+from langchain_community.vectorstores import Milvus
+
 
 import os
 
@@ -101,15 +102,43 @@ documents = loader.load()
 text_splitter = CharacterTextSplitter(chunk_size=100, chunk_overlap=20)
 docs = text_splitter.split_documents(documents)
 
-embedding_model = "thenlper/gte-small-zh"
+# embedding_model = "thenlper/gte-small-zh"
+# embedding_model = "iic/nlp_gte_sentence-embedding_chinese-small"
+embedding_model = "milkey/gte:large-zh-f16"
 # 创建嵌入模型
-embedding_model = HuggingFaceEmbeddings(model_name=embedding_model, model_kwargs={'device': "cpu"},
-                                                encode_kwargs={'normalize_embeddings': True})
+# embedding_model = HuggingFaceEmbeddings(model_name=embedding_model, model_kwargs={'device': "cpu"},
+#                                                 encode_kwargs={'normalize_embeddings': True})
+# embeddings = ModelScopeEmbeddings(model_id=embedding_model)
+embeddings = OllamaEmbeddings(base_url= "http://182.254.242.30:11434", model=embedding_model, temperature=0.5,)
 
 # 构建向量数据库
-vectordb = Chroma.from_documents(documents=docs, embedding=embedding_model)
+# vectordb = Chroma.from_documents(documents=docs, embedding=embedding_model)
 
+vectordb = Milvus.from_documents(
+    docs,
+    embeddings,
+    collection_name="my_collection2",
+    connection_args={"host": "182.254.242.30", "port": "19530"},
 
+)
+# vectordb = Milvus(
+#     embedding_function=embeddings,
+#     collection_name="my_collection",
+#     auto_id=True,
+#     connection_args={"host": "182.254.242.30", "port": "19530"},
+# )
+# # vectordb.delete()
+# # 从 Document 对象中提取文本和元数据
+# texts = [doc.page_content for doc in docs]
+# metadatas = [doc.metadata for doc in docs]
+#
+# # vectordb.from_texts(texts=[doc.page_content for doc in docs], metadatas=[doc.metadata for doc in docs], embedding=embeddings, dimension=1024)
+# # vectordb.add_texts("textdassssddddddddddddddddddddddddddds", dimension=1024)
+# vectordb.add_texts(
+#     texts=texts,
+#     metadatas=metadatas,
+#     dimension=512
+# )
 # document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = vectordb.as_retriever()
 

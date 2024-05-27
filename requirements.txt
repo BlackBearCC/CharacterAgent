@@ -1,6 +1,7 @@
 sqlalchemy~=1.4.51
 langchain~=0.1.5
 aiohttp~=3.8.5
+pymilvus
 dashscope~=1.14.1
 pydantic~=2.5.3
 fastapi~=0.104.1
@@ -12,7 +13,6 @@ sqlalchemy==1.4.51
 httpx~=0.25.1
 orjson~=3.9.15
 neo4j
-chromadb
 aiomysql
 sse_starlette
 setuptools~=68.0.0
