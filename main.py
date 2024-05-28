@@ -182,7 +182,7 @@ testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
 @app.post("/create_game_user")
 async def add_game_user(request: AddGameUser):
     try:
-        result = user_database.add_game_user(game_id=request.game_id, username=request.username, email=request.email)
+        result = user_database.add_game_user(game_uid=request.game_uid, username=request.username, email=request.email)
         return JSONResponse(content={"message":result})
     except SQLAlchemyError as e:
         logging.error(f"添加游戏用户失败: {str(e)}")
@@ -196,9 +196,17 @@ async def chat_event_generator(uid, input_text):
 
 @app.post("/chat")
 async def generate(request: ChatRequest):
-    logging.info(f"用户输入：{request.input}")
+
+    logging.info(f"常规请求：{request.input}")
     return EventSourceResponse(chat_event_generator(request.uid, request.input))
 
+
+@app.post("/game/chat")
+async def generate(request: ChatRequest):
+    logging.info(f"游戏端请求uid:{request.uid}.输入:{request.input}")
+    uid = user_database.get_user_by_game_uid(request.uid).guid
+
+    return EventSourceResponse(chat_event_generator(uid, request.input))
 
 async def write_diary_event_generator(uid, date):
     async for response_chunk in tuji_agent.write_diary(uid=uid,date=date):

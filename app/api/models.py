@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 class AddGameUser(BaseModel):
-    game_id: str
+    game_uid: str
     username: str = None
     email: str = None
 
