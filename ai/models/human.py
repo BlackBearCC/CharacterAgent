@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from langchain_core.messages.base import BaseMessage, BaseMessageChunk
 
@@ -12,7 +12,7 @@ class HumanMessage(BaseMessage):
     """
 
     type: Literal["human"] = "human"
-    # created_at: int =None
+    created_at: Optional[str] = None
     generate_from: str = None
 
     call_step: str = None

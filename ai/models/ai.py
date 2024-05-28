@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Literal, Union, Optional
 
 from langchain_core.messages.base import (
     BaseMessage,
@@ -33,7 +33,7 @@ class AIMessage(BaseMessage):
     """If provided, tool calls with parsing errors associated with the message."""
 
     type: Literal["ai"] = "ai"
-    # created_at: int =None
+    created_at: Optional[str] = None
     generate_from:str = None
     call_step: str = None
 

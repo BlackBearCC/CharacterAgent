@@ -171,11 +171,14 @@ fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.
 
 
 history_buffer = chat_message_history.buffer()
+print(history_buffer)
 
 base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
 tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm,fast_llm=fast_llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
 
 testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
+
+
 
 
 
@@ -194,6 +197,7 @@ async def generate(request: ChatRequest):
 async def write_diary_event_generator(uid, date):
     async for response_chunk in tuji_agent.write_diary(uid=uid,date=date):
         yield response_chunk
+
 
 
 @app.post("/write_diary")

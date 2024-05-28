@@ -1,12 +1,13 @@
-import datetime
+
 import json
 import logging
-import time
+
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
-from sqlalchemy import Column, Integer, Text, create_engine, text
-
+from dateutil.parser import parse
+from sqlalchemy import Column, Integer, Text, create_engine, text, DateTime
+from datetime import datetime
 from ai.models.ai import AIMessage
 from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.human import HumanMessage
@@ -51,7 +52,7 @@ def create_message_model(table_name: str, DynamicBase: Any) -> Any:
         id = Column(Integer, primary_key=True)
         session_id = Column(Text)
         message = Column(Text)  # Set collation to support Unicode characters
-        created_at = Column(Integer)  # Add a timestamp column (assuming Unix timestamp in seconds)
+        created_at = Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
         generate_from = Column(Text)
         call_step = Column(Text)
 
@@ -73,36 +74,46 @@ class DefaultMessageConverter(BaseMessageConverter):
         return {"type": message.type, "data": message.content}
     def from_sql_model(self, sql_message: Any) -> BaseMessage:
         message_dict = json.loads(sql_message.message)
-        print(message_dict)
+        # print(message_dict)
+
 
         message_type = message_dict.get("type")
         content = message_dict.get("data", {})
-        # created_at = sql_message.created_at  # Get the timestamp from the SQL model
-
+        created_at = sql_message.created_at.strftime("%Y-%m-%d %H:%M:%S")  # Convert datetime to string
 
         if message_type == "human":
-            message = HumanMessage(content=content)
+            message = HumanMessage(content=content,created_at=created_at)
         elif message_type == "ai":
-            message = AIMessage(content=content)
+            message = AIMessage(content=content,created_at=created_at)
         elif message_type == "system":
-            message = SystemMessage(content=content)
+            message = SystemMessage(content=content,created_at=created_at)
         else:
             message = BaseMessage(content=content)
 
         # Add the created_at attribute to the message dict
         # message_dict["data"]["created_at"] = created_at
-        message.message = json.dumps(message_dict, ensure_ascii=False)
+        # message.message = json.dumps(message_dict, ensure_ascii=False)
 
         return message
 
+
     def to_sql_model(self, message: BaseMessage, session_id: str) -> Any:
-        timestamp = int(time.time())  # Get current Unix timestamp
+        now = datetime.now()  # 获取当前日期和时间
+        # 检查message对象是否有created_at属性
+        if hasattr(message, 'created_at') and message.created_at is not None:
+            try:
+                message_created_at = parse(message.created_at)  # 将字符串转换为datetime
+            except ValueError:
+                message_created_at = now  # 转换失败，使用当前时间
+        else:
+            message_created_at = now
+
         return self.model_class(
             session_id=session_id,
             message=json.dumps(self.message_to_dict(message), ensure_ascii=False),
             generate_from=message.generate_from,
             call_step=message.call_step,
-            created_at=timestamp,  # Add created_at field
+            created_at=message_created_at,
         )
     def get_sql_model_class(self) -> Any:
         return self.model_class
@@ -163,6 +174,7 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
 
             # 反向遍历查询结果，并将每条记录转换为BaseMessage对象，添加到消息列表中
             for record in reversed (result):
+
                 messages.append(self.converter.from_sql_model(record))
 
 
@@ -177,11 +189,11 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
                 # timestamp = datetime.datetime.fromtimestamp(message.created_at).strftime(
                 #     "%Y-%m-%d %H:%M:%S") if with_timestamps else ""
                 if isinstance(message, HumanMessage):
-                    history_buffer += f"大头爸爸: {message.content}\n"
+                    history_buffer += f"Time:{message.created_at},大头爸爸: {message.content}\n"
                 elif isinstance(message, AIMessage):
-                    history_buffer += f"兔几妹妹: {message.content}\n"
+                    history_buffer += f"Time:{message.created_at},兔几妹妹: {message.content}\n"
                 elif isinstance(message, SystemMessage):
-                    history_buffer += f"<SYSTEM>: {message.content}\n</SYSTEM>"
+                    history_buffer += f"<SYSTEM>:Time:{message.created_at}\n {message.content}\n</SYSTEM>"
             return history_buffer.strip()  # 去掉末尾换行符
 
 
