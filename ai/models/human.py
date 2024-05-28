@@ -12,8 +12,10 @@ class HumanMessage(BaseMessage):
     """
 
     type: Literal["human"] = "human"
-    created_at: int =None
+    # created_at: int =None
+    generate_from: str = None
 
+    call_step: str = None
     @classmethod
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""

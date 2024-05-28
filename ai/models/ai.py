@@ -33,7 +33,11 @@ class AIMessage(BaseMessage):
     """If provided, tool calls with parsing errors associated with the message."""
 
     type: Literal["ai"] = "ai"
-    created_at: int
+    # created_at: int =None
+    generate_from:str = None
+    call_step: str = None
+
+
     @classmethod
     def get_lc_namespace(cls) -> List[str]:
         """Get the namespace of the langchain object."""

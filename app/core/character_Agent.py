@@ -215,10 +215,13 @@ class CharacterAgent(AbstractAgent):
         retriever_lambda = RunnableLambda(self.rute_retriever)
         retriever_chain = retriever_lambda
 
+        step_message = ""
         final_output = ""  # 用于存储最终输出字符串
         self.user_input = input_text  # 存储用户输入
-        msg =HumanMessage(content=input_text)
-        self.history.add_message(msg)
+
+
+
+        self.history.add_message(HumanMessage(content=input_text))
          # 在历史记录中添加用户消息
         logging.info(f"User Input: {input_text}")  # 记录用户输入的日志
         logging.info("Agent : 检索对话知识库中...")
@@ -240,19 +243,6 @@ class CharacterAgent(AbstractAgent):
             try:
                 json_output = json.loads(output)
                 logging.info(f"Agent Action: {json_output}")
-
-                # 将字典转换为JSON格式的字符串
-                # input_str = json.dumps(json_output["input"], ensure_ascii=False)
-                concatenated_values = ''
-                for key, value in json_output["input"].items():
-                    # 拼接键值
-                    concatenated_values += f"{key}={value}"+','
-
-
-                message = f"Action: {json_output['action']} - Input: {concatenated_values}"
-
-                msg = SystemMessage(content=message)
-                self.history.add_message(msg)
                 # self.history.add_ai_message(message)
                 return json_output
             except json.JSONDecodeError:
@@ -269,11 +259,18 @@ class CharacterAgent(AbstractAgent):
                 # print(f"{chunk}", end="|", flush=True)
                 yield chunk
             # logging.info(f"Agent Deep Chain Output: {strategy_output}")
-            self.history.add_ai_message(strategy_output)
+
+            # 将字典转换为JSON格式的字符串
+            # input_str = json.dumps(json_output["input"], ensure_ascii=False)
+            concatenated_values = ''
+            for key, value in final_json_output["input"].items():
+                concatenated_values += f"{key}={value}" + ','
+            step_message = f"Action: {final_json_output['action']} - Input: {concatenated_values}"
+            self.history.add_message(AIMessage(content=strategy_output,generate_from="DeepChain" , call_step=step_message))
         else:
             # 如果输出不是字典，则视为快速链输出
             logging.info(f"Agent Fast Chain Output: {final_output}")
-            self.history.add_ai_message(final_output)
+            self.history.add_message(AIMessage(content=final_output,generate_from="FastChain" ,call_step=None))
             pass  # 忽略else块中的pass，避免修改原有代码逻辑
 
         entity_memory = EntityMemory(
@@ -288,6 +285,7 @@ class CharacterAgent(AbstractAgent):
 
         info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
         entity_with_history = info_with_entity.replace("{history}",self.history.buffer(10))
+        print("info_with_entity",entity_with_history)
         entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
         entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
         reflexion_chain = entity_prompt_template | self.fast_llm | output_parser
@@ -318,7 +316,7 @@ class CharacterAgent(AbstractAgent):
         output_parser = StrOutputParser()
         event_chain = prompt_template | llm | output_parser
         system_message = AIMessage(content=event)
-        self.history.add_ai_message(final_output)
+        # self.history.add_ai_message(final_output)
         async for chunk in event_chain.astream({"event":event}):
             yield chunk
 

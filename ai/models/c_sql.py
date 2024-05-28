@@ -52,6 +52,8 @@ def create_message_model(table_name: str, DynamicBase: Any) -> Any:
         session_id = Column(Text)
         message = Column(Text)  # Set collation to support Unicode characters
         created_at = Column(Integer)  # Add a timestamp column (assuming Unix timestamp in seconds)
+        generate_from = Column(Text)
+        call_step = Column(Text)
 
     return Message
 
@@ -71,21 +73,24 @@ class DefaultMessageConverter(BaseMessageConverter):
         return {"type": message.type, "data": message.content}
     def from_sql_model(self, sql_message: Any) -> BaseMessage:
         message_dict = json.loads(sql_message.message)
+        print(message_dict)
+
         message_type = message_dict.get("type")
         content = message_dict.get("data", {})
-        created_at = sql_message.created_at  # Get the timestamp from the SQL model
+        # created_at = sql_message.created_at  # Get the timestamp from the SQL model
+
 
         if message_type == "human":
-            message = HumanMessage(content=content, created_at=created_at)
+            message = HumanMessage(content=content)
         elif message_type == "ai":
-            message = AIMessage(content=content, created_at=created_at)
+            message = AIMessage(content=content)
         elif message_type == "system":
-            message = SystemMessage(content=content, created_at=created_at)
+            message = SystemMessage(content=content)
         else:
-            message = BaseMessage(content=content, created_at=created_at)
+            message = BaseMessage(content=content)
 
         # Add the created_at attribute to the message dict
-        message_dict["data"]["created_at"] = created_at
+        # message_dict["data"]["created_at"] = created_at
         message.message = json.dumps(message_dict, ensure_ascii=False)
 
         return message
@@ -95,6 +100,8 @@ class DefaultMessageConverter(BaseMessageConverter):
         return self.model_class(
             session_id=session_id,
             message=json.dumps(self.message_to_dict(message), ensure_ascii=False),
+            generate_from=message.generate_from,
+            call_step=message.call_step,
             created_at=timestamp,  # Add created_at field
         )
     def get_sql_model_class(self) -> Any:
@@ -158,26 +165,25 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
             for record in reversed (result):
                 messages.append(self.converter.from_sql_model(record))
 
+
             return messages  # 返回消息列表
 
     def buffer(self, count: int = 100, with_timestamps: bool = True) -> str:
-        try:
+
             _messages = self.messages(count)
             history_buffer = ""
 
             for message in _messages:
-                timestamp = datetime.datetime.fromtimestamp(message.created_at).strftime(
-                    "%Y-%m-%d %H:%M:%S") if with_timestamps else ""
+                # timestamp = datetime.datetime.fromtimestamp(message.created_at).strftime(
+                #     "%Y-%m-%d %H:%M:%S") if with_timestamps else ""
                 if isinstance(message, HumanMessage):
-                    history_buffer += f"{timestamp} 大头爸爸: {message.content}\n"
+                    history_buffer += f"大头爸爸: {message.content}\n"
                 elif isinstance(message, AIMessage):
-                    history_buffer += f"{timestamp} 兔几妹妹: {message.content}\n"
+                    history_buffer += f"兔几妹妹: {message.content}\n"
                 elif isinstance(message, SystemMessage):
-                    history_buffer += f"{timestamp} <SYSTEM>: {message.content}\n</SYSTEM>"
+                    history_buffer += f"<SYSTEM>: {message.content}\n</SYSTEM>"
             return history_buffer.strip()  # 去掉末尾换行符
-        except Exception as e:
-            logger.error(f"Error occurred while fetching messages: {str(e)}")  # 记录错误日志
-            return "No messages found"  # 返回无消息提示
+
 
 
 
