@@ -10,8 +10,10 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 
+from ai.models.ai import AIMessage
 from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
+from ai.models.human import HumanMessage
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
@@ -214,7 +216,9 @@ class CharacterAgent(AbstractAgent):
 
         final_output = ""  # 用于存储最终输出字符串
         self.user_input = input_text  # 存储用户输入
-        self.history.add_user_message(input_text)  # 在历史记录中添加用户消息
+        msg =HumanMessage(content=input_text)
+        self.history.add_message(msg)
+         # 在历史记录中添加用户消息
         logging.info(f"User Input: {input_text}")  # 记录用户输入的日志
         logging.info("Agent : 检索对话知识库中...")
 
@@ -309,6 +313,8 @@ class CharacterAgent(AbstractAgent):
         prompt_template = PromptTemplate(template=info_with_history, input_variables=["event"])
         output_parser = StrOutputParser()
         event_chain = prompt_template | llm | output_parser
+        system_message = AIMessage(content=event)
+        self.history.add_ai_message(final_output)
         async for chunk in event_chain.astream({"event":event}):
             yield chunk
 

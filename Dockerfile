@@ -17,12 +17,12 @@ RUN pip install nltk -i https://pypi.tuna.tsinghua.edu.cn/simple
 # 安装 requirements.txt 中列出的依赖
 RUN pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install --no-cache-dir uvicorn[standard] fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple
-# RUN pip install sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN #pip install sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 让容器监听80端口https://devops.aliyun.com/lingma/login?port=37510&state=2-2375a61148324a3e97bf8f79693af1fa
 EXPOSE 80
 
 
 
-# 运行应用
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
+   CMD pip install --no-cache-dir sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+       uvicorn main:app --host 0.0.0.0 --port 80 --reload

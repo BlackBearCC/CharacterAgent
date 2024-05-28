@@ -183,7 +183,7 @@ async def chat_event_generator(uid, input_text):
 
     async for response_chunk in tuji_agent.response(uid=uid, input_text=input_text):
         print(response_chunk,end="",flush=True)
-        yield f"data: {response_chunk}\n\n"
+        yield response_chunk
 
 @app.post("/chat")
 async def generate(request: ChatRequest):
@@ -193,7 +193,7 @@ async def generate(request: ChatRequest):
 
 async def write_diary_event_generator(uid, date):
     async for response_chunk in tuji_agent.write_diary(uid=uid,date=date):
-        yield f"data: {response_chunk}\n\n"
+        yield response_chunk
 
 
 @app.post("/write_diary")
@@ -206,7 +206,7 @@ async def write_diary (request: WriteDiary):
 
 async def event_generator(uid, event):
     async for response_chunk in tuji_agent.event_response(uid=uid,event=event):
-        yield f"data: {response_chunk}\n\n"
+        yield response_chunk
 
 
 @app.post("/chat_test")
@@ -218,7 +218,7 @@ async def generate(request: ChatRequest):
     async def sse_generator():
         for chunks in fast_llm.stream(request.input):
             print(chunks,end="",flush=True)
-            yield f"data: {chunks}\n\n"
+            yield chunks
 
     # return EventSourceResponse(chat_event_generator(request.uid, request.input))
     return EventSourceResponse(sse_generator())
