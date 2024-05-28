@@ -13,6 +13,7 @@ class User(Base):
     guid = Column(String(128), primary_key=True)
     username = Column(String(50))
     email = Column(String(100))
+    game_id = Column(String(16))
 
 class UserDatabase:
     """Handles user-related database operations."""
@@ -31,14 +32,33 @@ class UserDatabase:
         """Generate a unique GUID."""
         return str(uuid.uuid4())
 
-    def add_user(self, username: str, email: str) -> str:
+    def add_user(self, game_id: str=None,username: str=None, email: str=None ) -> str:
         """Add a new user to the database."""
         new_guid = self.generate_guid()
-        new_user = User(guid=new_guid, username=username, email=email)
+        new_user = User(guid=new_guid, username=username, email=email,game_id=game_id)
         with self.Session() as session:
             session.add(new_user)
             session.commit()
         return new_guid
+
+    def add_game_user(self, game_id: str, username: str = None, email: str = None) -> str:
+        """Add a new user to the database or update an existing one by game_id."""
+
+
+        with self.Session() as session:
+            existing_user = session.query(User).filter_by(game_id=game_id).first()
+
+            if existing_user:
+                # 用户已存在，
+                return f"用户已存在,guid:{game_id}"
+            else:
+                # 如果用户不存在，创建新用户
+                new_guid = self.generate_guid()
+                new_user = User(guid=new_guid, username=username, email=email, game_id=game_id)
+                session.add(new_user)
+                session.commit()
+                return f"新游戏用户：{new_guid},ai_uid:{new_guid}"
+
 
     def get_user_by_guid(self, guid: str) -> User:
         """Get a user by their GUID."""

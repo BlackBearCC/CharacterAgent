@@ -20,18 +20,17 @@ import os
 
 
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sse_starlette import EventSourceResponse
-
-
-
+from starlette.responses import JSONResponse
 
 from ai.models.c_sql import SQLChatMessageHistory
 
 from ai.models.user import UserDatabase
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
-from app.api.models import ChatRequest, WriteDiary, EventRequest
+from app.api.models import ChatRequest, WriteDiary, EventRequest, AddGameUser
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -180,7 +179,14 @@ testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
 
 
 
-
+@app.post("/create_game_user")
+async def add_game_user(request: AddGameUser):
+    try:
+        result = user_database.add_game_user(game_id=request.game_id, username=request.username, email=request.email)
+        return JSONResponse(content={"message":result})
+    except SQLAlchemyError as e:
+        logging.error(f"添加游戏用户失败: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": "添加用户失败."})
 
 async def chat_event_generator(uid, input_text):
 

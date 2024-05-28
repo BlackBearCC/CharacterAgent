@@ -2,6 +2,10 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+class AddGameUser(BaseModel):
+    game_id: str
+    username: str = None
+    email: str = None
 
 class ChatRequest(BaseModel):
     uid: str  # 用户id
