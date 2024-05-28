@@ -10,6 +10,7 @@ from sqlalchemy import Column, Integer, Text, create_engine, text
 from ai.models.ai import AIMessage
 from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.human import HumanMessage
+from ai.models.system import SystemMessage
 
 try:
     from sqlalchemy.orm import declarative_base
@@ -18,7 +19,6 @@ except ImportError:
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import (
     BaseMessage,
-    message_to_dict,
     messages_from_dict
 )
 from sqlalchemy.orm import sessionmaker
@@ -65,16 +65,22 @@ class DefaultMessageConverter(BaseMessageConverter):
         #     connection.execute(
         #         text(f"ALTER TABLE {table_name} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"))
 
+    def message_to_dict(self,message: BaseMessage) -> dict:
+        """修改 langchain的message_to_dict 方法，替换存入数据库的键值
+        """
+        return {"type": message.type, "data": message.content}
     def from_sql_model(self, sql_message: Any) -> BaseMessage:
         message_dict = json.loads(sql_message.message)
         message_type = message_dict.get("type")
-        content = message_dict.get("data", {}).get("content", "")
+        content = message_dict.get("data", {})
         created_at = sql_message.created_at  # Get the timestamp from the SQL model
 
         if message_type == "human":
             message = HumanMessage(content=content, created_at=created_at)
         elif message_type == "ai":
             message = AIMessage(content=content, created_at=created_at)
+        elif message_type == "system":
+            message = SystemMessage(content=content, created_at=created_at)
         else:
             message = BaseMessage(content=content, created_at=created_at)
 
@@ -88,7 +94,7 @@ class DefaultMessageConverter(BaseMessageConverter):
         timestamp = int(time.time())  # Get current Unix timestamp
         return self.model_class(
             session_id=session_id,
-            message=json.dumps(message_to_dict(message), ensure_ascii=False),
+            message=json.dumps(self.message_to_dict(message), ensure_ascii=False),
             created_at=timestamp,  # Add created_at field
         )
     def get_sql_model_class(self) -> Any:
@@ -163,10 +169,11 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
                 timestamp = datetime.datetime.fromtimestamp(message.created_at).strftime(
                     "%Y-%m-%d %H:%M:%S") if with_timestamps else ""
                 if isinstance(message, HumanMessage):
-                    history_buffer += f"{timestamp} 大头哥: {message.content}\n"
+                    history_buffer += f"{timestamp} 大头爸爸: {message.content}\n"
                 elif isinstance(message, AIMessage):
                     history_buffer += f"{timestamp} 兔几妹妹: {message.content}\n"
-            print(history_buffer.strip())
+                elif isinstance(message, SystemMessage):
+                    history_buffer += f"{timestamp} <SYSTEM>: {message.content}\n</SYSTEM>"
             return history_buffer.strip()  # 去掉末尾换行符
         except Exception as e:
             logger.error(f"Error occurred while fetching messages: {str(e)}")  # 记录错误日志

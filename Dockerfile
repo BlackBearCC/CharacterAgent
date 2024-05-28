@@ -24,5 +24,5 @@ EXPOSE 80
 
 
 
-   CMD pip install --no-cache-dir sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-       uvicorn main:app --host 0.0.0.0 --port 80 --reload
+CMD pip install --no-cache-dir sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+    uvicorn main:app --host 0.0.0.0 --port 80 --reload

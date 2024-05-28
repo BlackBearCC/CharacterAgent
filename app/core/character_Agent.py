@@ -15,6 +15,7 @@ from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.human import HumanMessage
 from ai.models.role_memory import OpinionMemory
+from ai.models.system import SystemMessage
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
@@ -249,7 +250,10 @@ class CharacterAgent(AbstractAgent):
 
 
                 message = f"Action: {json_output['action']} - Input: {concatenated_values}"
-                self.history.add_ai_message(message)
+
+                msg = SystemMessage(content=message)
+                self.history.add_message(msg)
+                # self.history.add_ai_message(message)
                 return json_output
             except json.JSONDecodeError:
                 logging.info("Agent Action: Use FastChain")

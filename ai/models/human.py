@@ -5,10 +5,7 @@ from langchain_core.messages.base import BaseMessage, BaseMessageChunk
 
 class HumanMessage(BaseMessage):
     """Message from a human."""
-    additional_kwargs: None = None
-    response_metadata: None = None
-    name: None = None
-    id: None = None
+
     example: bool = False
     """Whether this Message is being passed in to the model as part of an example 
         conversation.
