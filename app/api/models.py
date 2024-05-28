@@ -10,7 +10,7 @@ class AddGameUser(BaseModel):
 class ChatRequest(BaseModel):
     uid: str  # 用户id
     input: str # 玩家输入
-    role_statu: Optional[str] = None  # 角色状态
+    role_status: Optional[str] = None  # 角色状态
     chat_situation: Optional[str] = None  # 对话情境
 
 class WriteDiary(BaseModel):
@@ -19,10 +19,10 @@ class WriteDiary(BaseModel):
 
 class EventRequest(BaseModel):
     uid: str  # 用户id
-    need_response:str  # 是否需要回复
+    need_response:bool = False  # 是否需要回复
     create_at:  Optional[str] = None
     event_location:  Optional[str] = None
-    role_statu: Optional[str] = None  # 角色状态
+    role_status: Optional[str] = None  # 角色状态
     event_type: str # 事件类型
     event_name: str # 事件
     event_description: Optional[str] = None  # 事件描述

@@ -26,6 +26,7 @@ from sse_starlette import EventSourceResponse
 from starlette.responses import JSONResponse
 
 from ai.models.c_sql import SQLChatMessageHistory
+from ai.models.system import SystemMessage
 
 from ai.models.user import UserDatabase
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
@@ -162,20 +163,19 @@ tools = [
     # TopicTool(),  # 话题激发(先不做)
 ]
 chat_message_history = SQLChatMessageHistory(
-    session_id="test_session",
     connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
 )
 fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
 # fast_llm_7b = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
 
-
-history_buffer = chat_message_history.buffer()
-print(history_buffer)
+# testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
+# history_buffer = chat_message_history.buffer(guid=testuid)
+# print(history_buffer)
 
 base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
 tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm,fast_llm=fast_llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
 
-testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
+
 
 
 
@@ -190,29 +190,33 @@ async def add_game_user(request: AddGameUser):
 
 async def chat_event_generator(uid, input_text):
 
-    async for response_chunk in tuji_agent.response(uid=uid, input_text=input_text):
+    async for response_chunk in tuji_agent.response(guid=uid, input_text=input_text):
         print(response_chunk,end="",flush=True)
         yield response_chunk
 
 @app.post("/chat")
 async def generate(request: ChatRequest):
-
     logging.info(f"常规请求：{request.input}")
     return EventSourceResponse(chat_event_generator(request.uid, request.input))
 
 
 @app.post("/game/chat")
 async def generate(request: ChatRequest):
-    logging.info(f"游戏端请求uid:{request.uid}.输入:{request.input}")
+    logging.info(f"游戏端对话请求，uid:{request.uid}.输入:{request.input}")
     uid = user_database.get_user_by_game_uid(request.uid).guid
 
     return EventSourceResponse(chat_event_generator(uid, request.input))
 
 async def write_diary_event_generator(uid, date):
-    async for response_chunk in tuji_agent.write_diary(uid=uid,date=date):
+    async for response_chunk in tuji_agent.write_diary(guid=uid,date=date):
         yield response_chunk
 
 
+@app.post("/game/write_diary")
+async def write_diary (request: WriteDiary):
+    logging.info(f"游戏端日记请求，uid:{request.uid}")
+    uid = user_database.get_user_by_game_uid(request.uid).guid
+    return EventSourceResponse(write_diary_event_generator(uid, request.date))
 
 @app.post("/write_diary")
 async def write_diary (request: WriteDiary):
@@ -223,7 +227,7 @@ async def write_diary (request: WriteDiary):
 #     return EventSourceResponse(chat_event_generator(request.uid, request.input))
 
 async def event_generator(uid, event):
-    async for response_chunk in tuji_agent.event_response(uid=uid,event=event):
+    async for response_chunk in tuji_agent.event_response(guid=uid,event=event):
         yield response_chunk
 
 
@@ -240,22 +244,38 @@ async def generate(request: ChatRequest):
 
     # return EventSourceResponse(chat_event_generator(request.uid, request.input))
     return EventSourceResponse(sse_generator())
+@app.post("/game/event_response")
+async def event_response(request: EventRequest):
+    uid = user_database.get_user_by_game_uid(request.uid).guid
+    event = (
+        f"角色状态：{request.role_status}，"
+        f"事件: {request.event_name},"
+        f"发生时间：{request.create_at}，"
+        f"发生地点：{request.event_location}，"
+        f"事件详情：{request.event_description}，"
+        f"事件反馈：{request.event_feedback}，"
+        f"预期角色反应：{request.anticipatory_reaction}")
+    if request.need_response :
+        return EventSourceResponse(event_generator(uid, event))
+    else:
+        chat_message_history.add_message_with_uid(guid=uid, message=SystemMessage(content=event))
+        return JSONResponse(content={"message":"系统事件记录成功"})
+
 @app.post("/event_response")
 async def event_response(request: EventRequest):
-
-    if request.need_response == "true":
-        event = (
-            f"角色状态：{request.role_statu}，"
-            f"事件: {request.event_name},"
-            f"发生时间：{request.create_at}，"
-            f"发生地点：{request.event_location}，"
-            f"事件详情：{request.event_description}，"
-            f"事件反馈：{request.event_feedback}，"
-            f"预期角色反应：{request.anticipatory_reaction}")
-
+    event = (
+        f"角色状态：{request.role_status}，"
+        f"事件: {request.event_name},"
+        f"发生时间：{request.create_at}，"
+        f"发生地点：{request.event_location}，"
+        f"事件详情：{request.event_description}，"
+        f"事件反馈：{request.event_feedback}，"
+        f"预期角色反应：{request.anticipatory_reaction}")
+    if request.need_response :
         return EventSourceResponse(event_generator(request.uid, event))
-
-
+    else:
+        chat_message_history.add_message_with_uid(guid=request.uid, message=SystemMessage(content=event))
+        return JSONResponse(content={"message":"系统事件记录成功"})
 
 
 

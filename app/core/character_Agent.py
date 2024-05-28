@@ -68,13 +68,13 @@ class CharacterAgent(AbstractAgent):
 
         self.user_input = ""
 
-        self.uid = ""
 
 
 
 
 
-    async def rute_retriever(self, query):
+
+    async def rute_retriever(self, guid:str, query: str):
         docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
         print(docs_and_scores)
 
@@ -84,13 +84,13 @@ class CharacterAgent(AbstractAgent):
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
-        history = self.history.buffer(9)
+        history = self.history.buffer(guid,9)
 
         if avg_score < self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
             # Setup chains
             info_with_state = self.character_info.replace("{role_state}", role_state)
-            info_with_opinion = info_with_state.replace("{opinion}", opinion_memory.buffer(self.uid, 10))
+            info_with_opinion = info_with_state.replace("{opinion}", opinion_memory.buffer(guid, 10))
             info_with_history = info_with_opinion.replace("{history}", history)
 
             # print("Agent FastChain 动态信息填充:", info_with_history)
@@ -118,7 +118,7 @@ class CharacterAgent(AbstractAgent):
             # 替换角色状态占位符
             info_with_state = info_with_environment.replace("{role_state}", role_state)
             # 替换观点占位符
-            info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(self.uid,10) )
+            info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(guid,10) )
             # 替换历史占位符
             tuji_info_with_history = info_with_opinion.replace("{history}", history)
             # 替换工具占位符
@@ -202,7 +202,7 @@ class CharacterAgent(AbstractAgent):
         logging.info("Agent Use Chain: %s", action_name)
         return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
 
-    async def response(self, uid:str ,input_text: str) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,input_text: str) -> AsyncGenerator[str, None]:
         """
         异步处理用户输入，并生成相应的响应。
 
@@ -210,18 +210,18 @@ class CharacterAgent(AbstractAgent):
         :param user_input: 用户的输入文本。
         :return: 无返回值，但会异步处理用户输入，并通过日志和历史记录对话过程。
         """
-        self.uid = uid
-        # 初始化检索链
-        retriever_lambda = RunnableLambda(self.rute_retriever)
-        retriever_chain = retriever_lambda
 
+        # 初始化检索链
+        # retriever_lambda = RunnableLambda(self.rute_retriever)
+        # retriever_chain = retriever_lambda
+        retriever_chain =await self.rute_retriever(guid=guid, query=input_text)
         step_message = ""
         final_output = ""  # 用于存储最终输出字符串
         self.user_input = input_text  # 存储用户输入
 
 
 
-        self.history.add_message(HumanMessage(content=input_text))
+        self.history.add_message_with_uid(guid=guid,message=HumanMessage(content=input_text))
          # 在历史记录中添加用户消息
         logging.info(f"User Input: {input_text}")  # 记录用户输入的日志
         logging.info("Agent : 检索对话知识库中...")
@@ -266,25 +266,25 @@ class CharacterAgent(AbstractAgent):
             for key, value in final_json_output["input"].items():
                 concatenated_values += f"{key}={value}" + ','
             step_message = f"Action: {final_json_output['action']} - Input: {concatenated_values}"
-            self.history.add_message(AIMessage(content=strategy_output,generate_from="DeepChain" , call_step=step_message))
+            self.history.add_message_with_uid(guid=guid,message=AIMessage(content=strategy_output,generate_from="DeepChain" , call_step=step_message))
         else:
             # 如果输出不是字典，则视为快速链输出
             logging.info(f"Agent Fast Chain Output: {final_output}")
-            self.history.add_message(AIMessage(content=final_output,generate_from="FastChain" ,call_step=None))
+            self.history.add_message_with_uid(guid=guid,message=AIMessage(content=final_output,generate_from="FastChain" ,call_step=None))
             pass  # 忽略else块中的pass，避免修改原有代码逻辑
 
         entity_memory = EntityMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
 
-        entity = entity_memory.get_entity(self.uid)
+        entity = entity_memory.get_entity(guid)
         output_parser = StrOutputParser()
 
         print(entity)
         if entity is None:
-            entity = Entity(entity="大头哥",summary="是个大头",user_guid=self.uid)
+            entity = Entity(entity="大头哥",summary="是个大头",user_guid=guid)
 
         info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
-        entity_with_history = info_with_entity.replace("{history}",self.history.buffer(10))
+        entity_with_history = info_with_entity.replace("{history}",self.history.buffer(guid,10))
         print("info_with_entity",entity_with_history)
         entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
         entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
@@ -294,10 +294,10 @@ class CharacterAgent(AbstractAgent):
             entity_output += chunk
             print(f"{chunk}", end="|", flush=True)
         entity.summary = entity_output
-        entity_memory.save_entity(self.uid,entity)
+        entity_memory.save_entity(guid,entity)
         logging.info(f"Agent 实体更新: {entity}")
         #
-    async def write_diary(self,uid:str,date: str) -> AsyncGenerator[str, None]:
+    async def write_diary(self,guid:str,date: str) -> AsyncGenerator[str, None]:
          # 替换配置占位符
         info_with_role = WRITE_DIARY_PROMPT.replace("{role}",self.base_info)
         info_with_name = info_with_role.replace("{user}", "大头哥").replace("{char}", "兔兔")
@@ -305,13 +305,13 @@ class CharacterAgent(AbstractAgent):
         prompt_template = PromptTemplate(template=info_with_name, input_variables=[ "history"])
         output_parser = StrOutputParser()
         diary_chain =  prompt_template | self.llm | output_parser
-        async for chunk in diary_chain.astream({"history":self.history.buffer(10)}):
+        async for chunk in diary_chain.astream({"history":self.history.buffer(guid,10)}):
             yield chunk
 
-    async def event_response(self,uid:str,event: str) -> AsyncGenerator[str, None]:
+    async def event_response(self,guid:str,event: str) -> AsyncGenerator[str, None]:
         llm = Tongyi(model_name="qwen-turbo", top_p=0.4, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
-        info_with_history = info_with_role.replace("{history}",self.history.buffer(10))
+        info_with_history = info_with_role.replace("{history}",self.history.buffer(guid,10))
         prompt_template = PromptTemplate(template=info_with_history, input_variables=["event"])
         output_parser = StrOutputParser()
         event_chain = prompt_template | llm | output_parser

@@ -6,12 +6,13 @@ from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
 from dateutil.parser import parse
-from sqlalchemy import Column, Integer, Text, create_engine, text, DateTime
+from sqlalchemy import Column, Integer, Text, create_engine, text, DateTime, String, ForeignKey
 from datetime import datetime
 from ai.models.ai import AIMessage
 from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.human import HumanMessage
 from ai.models.system import SystemMessage
+from ai.models.user import User
 
 try:
     from sqlalchemy.orm import declarative_base
@@ -36,7 +37,7 @@ class BaseMessageConverter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def to_sql_model(self, message: BaseMessage, session_id: str) -> Any:
+    def to_sql_model(self, message: BaseMessage, guid: str) -> Any:
         """Convert a BaseMessage instance to a SQLAlchemy model."""
         raise NotImplementedError
 
@@ -50,7 +51,7 @@ def create_message_model(table_name: str, DynamicBase: Any) -> Any:
     class Message(DynamicBase):  # type: ignore[valid-type, misc]
         __tablename__ = table_name
         id = Column(Integer, primary_key=True)
-        session_id = Column(Text)
+        user_guid = Column(String(128), ForeignKey(User.guid))  # 修改为VARCHAR(128)并添加外键约束
         message = Column(Text)  # Set collation to support Unicode characters
         created_at = Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
         generate_from = Column(Text)
@@ -97,7 +98,7 @@ class DefaultMessageConverter(BaseMessageConverter):
         return message
 
 
-    def to_sql_model(self, message: BaseMessage, session_id: str) -> Any:
+    def to_sql_model(self, message: BaseMessage, guid: str) -> Any:
         now = datetime.now()  # 获取当前日期和时间
         # 检查message对象是否有created_at属性
         if hasattr(message, 'created_at') and message.created_at is not None:
@@ -109,7 +110,7 @@ class DefaultMessageConverter(BaseMessageConverter):
             message_created_at = now
 
         return self.model_class(
-            session_id=session_id,
+            user_guid=guid,
             message=json.dumps(self.message_to_dict(message), ensure_ascii=False),
             generate_from=message.generate_from,
             call_step=message.call_step,
@@ -124,24 +125,24 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
 
     def __init__(
         self,
-        session_id: str,
+
         connection_string: str,
         table_name: str = "message_store",
-        session_id_field_name: str = "session_id",
+        user_guid_field_name: str = "user_guid",
         custom_message_converter: Optional[BaseMessageConverter] = None,
         _create_table_if_not_exists: bool = True,
 
     ):
         self.connection_string = connection_string
         self.engine = create_engine(connection_string, echo=False)
-        self.session_id_field_name = session_id_field_name
+        self.user_guid_field_name = user_guid_field_name
         self.converter = DefaultMessageConverter(table_name)
         self.sql_model_class = self.converter.get_sql_model_class()
-        if not hasattr(self.sql_model_class, session_id_field_name):
+        if not hasattr(self.sql_model_class, user_guid_field_name):
             raise ValueError("SQL model class must have session_id column")
         self._create_table_if_not_exists()
 
-        self.session_id = session_id
+
         self.Session = sessionmaker(self.engine)
 
 
@@ -149,7 +150,7 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
         self.sql_model_class.metadata.create_all(self.engine)
 
 
-    def messages(self, count: int = 100) -> List[BaseMessage]:
+    def messages(self,guid:str, count: int = 100) -> List[BaseMessage]:
         """
         从数据库中检索指定数量的消息记录。
 
@@ -160,29 +161,25 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
         List[BaseMessage]: 检索到的消息记录列表，每个记录都是一个BaseMessage类型的实例。
         """
 
+
         with self.Session() as session:
             result = (
                 session.query(self.sql_model_class)
-                .where(getattr(self.sql_model_class, self.session_id_field_name) == self.session_id)
+                .where(getattr(self.sql_model_class, self.user_guid_field_name) == guid)
                 .order_by(self.sql_model_class.id.desc())
                 .limit(count)
                 .all()  # 添加.all()来执行查询
             )
 
-
-            messages = []  # 初始化消息列表
-
-            # 反向遍历查询结果，并将每条记录转换为BaseMessage对象，添加到消息列表中
-            for record in reversed (result):
-
+            messages = []
+            for record in reversed(result):
                 messages.append(self.converter.from_sql_model(record))
 
+            return messages
 
-            return messages  # 返回消息列表
+    def buffer(self, guid:str,count: int = 100, with_timestamps: bool = True) -> str:
 
-    def buffer(self, count: int = 100, with_timestamps: bool = True) -> str:
-
-            _messages = self.messages(count)
+            _messages = self.messages(guid,count)
             history_buffer = ""
 
             for message in _messages:
@@ -202,20 +199,19 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
 
 
 
-    def add_message(self, message: BaseMessage) -> None:
+    # def add_message(self, message: BaseMessage) -> None:
+    #     """Append the message to the record in db"""
+    #     with self.Session() as session:
+    #         session.add(self.converter.to_sql_model(message, self.user_guid))
+    #         session.commit()
+
+    def add_message_with_uid(self,guid:str, message: BaseMessage) -> None:
         """Append the message to the record in db"""
         with self.Session() as session:
-            session.add(self.converter.to_sql_model(message, self.session_id))
+            session.add(self.converter.to_sql_model(message, guid))
             session.commit()
 
     def clear(self) -> None:
-        """Clear session memory from db"""
-
-        with self.Session() as session:
-            session.query(self.sql_model_class).filter(
-                getattr(self.sql_model_class, self.session_id_field_name)
-                == self.session_id
-            ).delete()
-            session.commit()
+       pass
 
 
