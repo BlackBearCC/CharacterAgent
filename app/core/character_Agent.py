@@ -84,7 +84,7 @@ class CharacterAgent(AbstractAgent):
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
-        history = self.history.buffer(guid,9)
+        history = self.history.buffer(guid,100)
 
         if avg_score < self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
@@ -131,7 +131,7 @@ class CharacterAgent(AbstractAgent):
             deep_chain = deep_prompt_template | self.llm | output_parser
             return deep_chain
 
-    async def use_tool_by_name(self, action_name: str, action_input: str) -> Any:
+    async def use_tool_by_name(self,guid:str, action_name: str, action_input: str) -> Any:
         """
         根据工具名称调用对应工具的方法，并传入action_input。
 
@@ -155,7 +155,7 @@ class CharacterAgent(AbstractAgent):
                 if hasattr(tool_instance, 'strategy'):
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-                    response_gen = tool_instance.strategy(uid =self.uid,user_input=self.user_input, action_input=action_input)
+                    response_gen = tool_instance.strategy(uid =guid,user_input=self.user_input, action_input=action_input)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         return response_gen
                     else:
@@ -176,7 +176,7 @@ class CharacterAgent(AbstractAgent):
         # 如果没有找到匹配的工具或方法，则返回None
         return None
 
-    async def route_post_deep_chain(self, deep_chain_output):
+    async def route_post_deep_chain(self, guid:str,input):
         """
         根据 deep_chain_output 决定使用哪一个链。
 
@@ -187,8 +187,8 @@ class CharacterAgent(AbstractAgent):
             字符串，表示选定的链，如果没有匹配的链，则返回 None。
         """
         # 暂时写死，json格式，计划根据prompt动态处理
-        action_name = deep_chain_output.get("action")
-        action_input = deep_chain_output.get("input")
+        action_name = input.get("action")
+        action_input = input.get("input")
 
         if action_name is None:
             logging.info("Agent action_name 为空,无策略调用")
@@ -200,7 +200,7 @@ class CharacterAgent(AbstractAgent):
             return None
 
         logging.info("Agent Use Chain: %s", action_name)
-        return await self.use_tool_by_name(action_name=action_name, action_input=action_input)
+        return await self.use_tool_by_name(guid=guid,action_name=action_name, action_input=action_input)
 
     async def response(self, guid:str ,input_text: str) -> AsyncGenerator[str, None]:
         """
@@ -254,7 +254,7 @@ class CharacterAgent(AbstractAgent):
         if isinstance(final_json_output, dict):
             strategy_output = ""
             # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
-            async for chunk in await self.route_post_deep_chain(final_json_output):
+            async for chunk in await self.route_post_deep_chain(guid=guid, input=final_json_output):
                 strategy_output += chunk
                 # print(f"{chunk}", end="|", flush=True)
                 yield chunk
@@ -281,7 +281,7 @@ class CharacterAgent(AbstractAgent):
 
         print(entity)
         if entity is None:
-            entity = Entity(entity="大头哥",summary="是个大头",user_guid=guid)
+            entity = Entity(entity="大头爸爸",summary="是个大头",user_guid=guid)
 
         info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
         entity_with_history = info_with_entity.replace("{history}",self.history.buffer(guid,10))

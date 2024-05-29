@@ -3,9 +3,10 @@ import asyncio
 import json
 import logging
 import re
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from langchain.text_splitter import CharacterTextSplitter
 
@@ -31,7 +32,7 @@ from ai.models.system import SystemMessage
 from ai.models.user import UserDatabase
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
-from app.api.models import ChatRequest, WriteDiary, EventRequest, AddGameUser
+from app.api.models import ChatRequest, WriteDiary, EventRequest, AddGameUser, RoleLog
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -188,11 +189,52 @@ async def add_game_user(request: AddGameUser):
         logging.error(f"添加游戏用户失败: {str(e)}")
         return JSONResponse(status_code=500, content={"error": "添加用户失败."})
 
+
+@app.post("/game/add_role_log")
+async def add_role_log(request: RoleLog):
+    try:
+        if not request.uid or not request.log:
+            raise HTTPException(status_code=400, detail="UID和LOG不能为空")
+
+        user = user_database.get_user_by_game_uid(request.uid)
+        if user is None:
+            raise HTTPException(status_code=400, detail="用户不存在")
+
+        # 检查create_at是否已提供并转换为datetime对象
+        create_at = None
+        if request.create_at:
+            try:
+                create_at = datetime.strptime(request.create_at, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="CREATE_AT必须是%Y-%m-%d %H:%M:%S格式"
+                )
+
+        # 使用create_at或None调用add_message_with_uid()
+        chat_message_history.add_message_with_uid(
+            user.guid,
+            SystemMessage(content=request.log, created_at=create_at)
+        )
+
+        return JSONResponse(content={"message": "系统事件记录成功"})
+    except Exception as e:
+        logging.error(f"添加系统事件日志异常: {str(e)}")
+        return JSONResponse(status_code=500, content={"message": f"系统错误: {str(e)}"})
+
+
+
+
+
+
 async def chat_event_generator(uid, input_text):
 
     async for response_chunk in tuji_agent.response(guid=uid, input_text=input_text):
         print(response_chunk,end="",flush=True)
         yield response_chunk
+
+
+
 
 @app.post("/chat")
 async def generate(request: ChatRequest):
