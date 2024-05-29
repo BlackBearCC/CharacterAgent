@@ -6,6 +6,7 @@ from langchain.memory import ConversationBufferMemory, ConversationStringBufferM
 from langchain.memory.prompt import ENTITY_MEMORY_CONVERSATION_TEMPLATE
 from langchain_community.llms.tongyi import Tongyi
 from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.language_models import BaseLLM
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
@@ -308,17 +309,18 @@ class CharacterAgent(AbstractAgent):
         async for chunk in diary_chain.astream({"history":self.history.buffer(guid,10)}):
             yield chunk
 
-    async def event_response(self,guid:str,event: str) -> AsyncGenerator[str, None]:
-        llm = Tongyi(model_name="qwen-turbo", top_p=0.4, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+    async def event_response(self,llm:BaseLLM,guid:str,event: str) -> AsyncGenerator[str, None]:
         info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
-        info_with_history = info_with_role.replace("{history}",self.history.buffer(guid,10))
+        info_with_history = info_with_role.replace("{history}",self.history.buffer(guid,20))
         prompt_template = PromptTemplate(template=info_with_history, input_variables=["event"])
         output_parser = StrOutputParser()
         event_chain = prompt_template | llm | output_parser
-        system_message = AIMessage(content=event)
-        # self.history.add_ai_message(final_output)
+        results =""
         async for chunk in event_chain.astream({"event":event}):
+            results+=chunk
             yield chunk
+        self.history.add_message_with_uid(guid=guid, message=SystemMessage(content=event))
+        self.history.add_message_with_uid(guid=guid, message=AIMessage(content=results,generate_from="Event"))
 
 
 

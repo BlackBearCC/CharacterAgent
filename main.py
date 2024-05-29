@@ -19,7 +19,7 @@ from langchain_community.vectorstores import Milvus, Chroma
 
 import os
 
-
+from langchain_core.language_models import BaseLLM
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
@@ -268,8 +268,8 @@ async def write_diary (request: WriteDiary):
 # async def login_event(request: ChatRequest):
 #     return EventSourceResponse(chat_event_generator(request.uid, request.input))
 
-async def event_generator(uid, event):
-    async for response_chunk in tuji_agent.event_response(guid=uid,event=event):
+async def event_generator(uid:str,llm:BaseLLM, event:str):
+    async for response_chunk in tuji_agent.event_response(guid=uid,llm=llm,event=event):
         yield response_chunk
 
 
@@ -297,27 +297,29 @@ async def event_response(request: EventRequest):
         f"事件详情：{request.event_description}，"
         f"事件反馈：{request.event_feedback}，"
         f"预期角色反应：{request.anticipatory_reaction}")
+    llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
+    # llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
     if request.need_response :
-        return EventSourceResponse(event_generator(uid, event))
+        return EventSourceResponse(event_generator(uid,llm=llm,event=event))
     else:
         chat_message_history.add_message_with_uid(guid=uid, message=SystemMessage(content=event))
         return JSONResponse(content={"message":"系统事件记录成功"})
 
-@app.post("/event_response")
-async def event_response(request: EventRequest):
-    event = (
-        f"角色状态：{request.role_status}，"
-        f"事件: {request.event_name},"
-        f"发生时间：{request.create_at}，"
-        f"发生地点：{request.event_location}，"
-        f"事件详情：{request.event_description}，"
-        f"事件反馈：{request.event_feedback}，"
-        f"预期角色反应：{request.anticipatory_reaction}")
-    if request.need_response :
-        return EventSourceResponse(event_generator(request.uid, event))
-    else:
-        chat_message_history.add_message_with_uid(guid=request.uid, message=SystemMessage(content=event))
-        return JSONResponse(content={"message":"系统事件记录成功"})
+# @app.post("/event_response")
+# async def event_response(request: EventRequest):
+#     event = (
+#         f"角色状态：{request.role_status}，"
+#         f"事件: {request.event_name},"
+#         f"发生时间：{request.create_at}，"
+#         f"发生地点：{request.event_location}，"
+#         f"事件详情：{request.event_description}，"
+#         f"事件反馈：{request.event_feedback}，"
+#         f"预期角色反应：{request.anticipatory_reaction}")
+#     if request.need_response :
+#         return EventSourceResponse(event_generator(request.uid, event))
+#     else:
+#         chat_message_history.add_message_with_uid(guid=request.uid, message=SystemMessage(content=event))
+#         return JSONResponse(content={"message":"系统事件记录成功"})
 
 
 

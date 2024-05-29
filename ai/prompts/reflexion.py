@@ -20,7 +20,7 @@ ENTITY_SUMMARIZATION_PROMPT = """
 </WORKFLOW>
 
 <ANNOUNCEMENTS>
-禁止输出WORKFLOW之外的其他内容，禁止输出你的推理步骤，只返回有效内容。
+禁止输出WORKFLOW之外的其他内容，禁止输出你的推理步骤，只返回结论内容。
 </ANNOUNCEMENTS>
 <INFO>
 完整对话历史（供上下文参考）： {history}
