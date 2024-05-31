@@ -31,8 +31,8 @@ class RoleLog(BaseModel):
 class ChatRequest(BaseModel):
     uid: str  # 用户id
     input: str # 玩家输入
-    role_status: Optional[str] = None  # 角色状态
-    chat_situation: Optional[str] = None  # 对话情境
+    role_status: Optional[str] = ""  # 角色状态
+    chat_situation: Optional[str] = ""  # 对话情境
 
 class WriteDiary(BaseModel):
     uid: str  # 用户id

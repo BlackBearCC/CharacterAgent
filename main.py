@@ -166,7 +166,8 @@ tools = [
 chat_message_history = SQLChatMessageHistory(
     connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
 )
-fast_llm = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
+# fast_llm = Ollama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
+fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 # fast_llm_7b = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
 
 # testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
@@ -188,6 +189,8 @@ async def add_game_user(request: AddGameUser):
     except SQLAlchemyError as e:
         logging.error(f"添加游戏用户失败: {str(e)}")
         return JSONResponse(status_code=500, content={"error": "添加用户失败."})
+
+@app.post("/update_game_user")
 
 
 @app.post("/game/add_role_log")
@@ -227,9 +230,9 @@ async def add_role_log(request: RoleLog):
 
 
 
-async def chat_event_generator(uid, input_text):
+async def chat_event_generator(uid, input_text,role_status:str=None):
 
-    async for response_chunk in tuji_agent.response(guid=uid, input_text=input_text):
+    async for response_chunk in tuji_agent.response(guid=uid, input_text=input_text,role_status=role_status):
         print(response_chunk,end="",flush=True)
         yield response_chunk
 
@@ -239,7 +242,7 @@ async def chat_event_generator(uid, input_text):
 @app.post("/chat")
 async def generate(request: ChatRequest):
     logging.info(f"常规请求：{request.input}")
-    return EventSourceResponse(chat_event_generator(request.uid, request.input))
+    return EventSourceResponse(chat_event_generator(request.uid, request.input,role_status=request.role_status))
 
 
 @app.post("/game/chat")
@@ -247,7 +250,7 @@ async def generate(request: ChatRequest):
     logging.info(f"游戏端对话请求，uid:{request.uid}.输入:{request.input}")
     uid = user_database.get_user_by_game_uid(request.uid).guid
 
-    return EventSourceResponse(chat_event_generator(uid, request.input))
+    return EventSourceResponse(chat_event_generator(uid, request.input,role_status=request.role_status))
 
 async def write_diary_event_generator(uid, date):
     async for response_chunk in tuji_agent.write_diary(guid=uid,date=date):
@@ -297,10 +300,11 @@ async def event_response(request: EventRequest):
         f"事件详情：{request.event_description}，"
         f"事件反馈：{request.event_feedback}，"
         f"预期角色反应：{request.anticipatory_reaction}")
-    llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
-    # llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+    # llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
+    llm = Tongyi(model_name="qwen-max", temperature=0.7, top_k=100,top_p=0.9, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
     if request.need_response :
         return EventSourceResponse(event_generator(uid,llm=llm,event=event))
+
     else:
         chat_message_history.add_message_with_uid(guid=uid, message=SystemMessage(content=event))
         return JSONResponse(content={"message":"系统事件记录成功"})

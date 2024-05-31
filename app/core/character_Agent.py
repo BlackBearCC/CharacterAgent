@@ -47,7 +47,7 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
 
 
-        self.similarity_threshold = 0.45
+        self.similarity_threshold = 0.42
         self.base_info = base_info
 
 
@@ -75,25 +75,38 @@ class CharacterAgent(AbstractAgent):
 
 
 
-    async def rute_retriever(self, guid:str, query: str):
+    async def rute_retriever(self, guid:str, query: str,role_status:str=None):
+        logging.info("Agent : 检索对话知识库中...")
         docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
         print(docs_and_scores)
-
         scores = [score for _, score in docs_and_scores]
         avg_score = sum(scores) / len(scores) if scores else 0
+        print("平均相似度分数:", avg_score)
+        entity_memory = EntityMemory(
+            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
+
+        entity = entity_memory.get_entity(guid)
+        if not entity :
+            entity = Entity( entity="大头哥哥", summary="", user_guid=guid)
 
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
-        history = self.history.buffer(guid,100)
+        history = self.history.buffer(guid,40)
 
         if avg_score < self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
             # Setup chains
-            info_with_state = self.character_info.replace("{role_state}", role_state)
-            info_with_opinion = info_with_state.replace("{opinion}", opinion_memory.buffer(guid, 10))
-            info_with_history = info_with_opinion.replace("{history}", history)
 
+            info_with_state = self.character_info.replace("{role_state}", role_status)
+            # 替换特殊记忆占位符
+            info_with_special_memory = info_with_state.replace("{special_memory}", f"{entity.entity}:{entity.summary}")
+            # 替换环境占位符
+            info_with_environment = info_with_special_memory.replace("{environment}",
+                                                                     "")
+            info_with_opinion = info_with_environment.replace("{opinion}", opinion_memory.buffer(guid, 10))
+            info_with_history = info_with_opinion.replace("{history}", history)
+            print("Agent : 填充动态信息"+info_with_history)
             # print("Agent FastChain 动态信息填充:", info_with_history)
 
             prompt_template = PromptTemplate(template=info_with_history, input_variables=["classic_scenes", "input"])
@@ -112,12 +125,12 @@ class CharacterAgent(AbstractAgent):
 
 
             # 替换特殊记忆占位符
-            info_with_special_memory = self.tuji_info.replace("{special_memory}", "用户的生日是8月19")
+            info_with_special_memory = self.tuji_info.replace("{special_memory}", f"{entity.entity}:{entity.summary}")
 
             # 替换环境占位符
-            info_with_environment = info_with_special_memory.replace("{environment}", "一个粉嫩的房间里，一个粉嫩的沙发上，一个粉嫩的床，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉嫩的床铺，一个粉")
+            info_with_environment = info_with_special_memory.replace("{environment}", "")
             # 替换角色状态占位符
-            info_with_state = info_with_environment.replace("{role_state}", role_state)
+            info_with_state = info_with_environment.replace("{role_state}", role_status)
             # 替换观点占位符
             info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(guid,10) )
             # 替换历史占位符
@@ -125,14 +138,14 @@ class CharacterAgent(AbstractAgent):
             # 替换工具占位符
             replacer = PlaceholderReplacer()
             final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
-            logging.info("==============替换工具后的提示字符串===============\n" + final_prompt)
+            print("==============替换工具后的提示字符串===============\n" + final_prompt)
 
             deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
 
             deep_chain = deep_prompt_template | self.llm | output_parser
             return deep_chain
 
-    async def use_tool_by_name(self,guid:str, action_name: str, action_input: str) -> Any:
+    async def use_tool_by_name(self,guid:str,role_status:str, action_name: str, action_input: str) -> Any:
         """
         根据工具名称调用对应工具的方法，并传入action_input。
 
@@ -156,7 +169,7 @@ class CharacterAgent(AbstractAgent):
                 if hasattr(tool_instance, 'strategy'):
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-                    response_gen = tool_instance.strategy(uid =guid,user_input=self.user_input, action_input=action_input)
+                    response_gen = tool_instance.strategy(uid =guid,user_input=self.user_input, action_input=action_input, role_status=role_status)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         return response_gen
                     else:
@@ -177,7 +190,7 @@ class CharacterAgent(AbstractAgent):
         # 如果没有找到匹配的工具或方法，则返回None
         return None
 
-    async def route_post_deep_chain(self, guid:str,input):
+    async def route_post_deep_chain(self, guid:str,input,role_status:str):
         """
         根据 deep_chain_output 决定使用哪一个链。
 
@@ -201,9 +214,9 @@ class CharacterAgent(AbstractAgent):
             return None
 
         logging.info("Agent Use Chain: %s", action_name)
-        return await self.use_tool_by_name(guid=guid,action_name=action_name, action_input=action_input)
+        return await self.use_tool_by_name(guid=guid,action_name=action_name, action_input=action_input,role_status=role_status)
 
-    async def response(self, guid:str ,input_text: str) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,input_text: str,role_status=None) -> AsyncGenerator[str, None]:
         """
         异步处理用户输入，并生成相应的响应。
 
@@ -215,7 +228,7 @@ class CharacterAgent(AbstractAgent):
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
         # retriever_chain = retriever_lambda
-        retriever_chain =await self.rute_retriever(guid=guid, query=input_text)
+        retriever_chain =await self.rute_retriever(guid=guid, query=input_text,role_status=role_status)
         step_message = ""
         final_output = ""  # 用于存储最终输出字符串
         self.user_input = input_text  # 存储用户输入
@@ -225,7 +238,7 @@ class CharacterAgent(AbstractAgent):
         self.history.add_message_with_uid(guid=guid,message=HumanMessage(content=input_text))
          # 在历史记录中添加用户消息
         logging.info(f"User Input: {input_text}")  # 记录用户输入的日志
-        logging.info("Agent : 检索对话知识库中...")
+
 
 
         # 通过检索链异步获取响应片段，并累加到最终输出
@@ -255,7 +268,7 @@ class CharacterAgent(AbstractAgent):
         if isinstance(final_json_output, dict):
             strategy_output = ""
             # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
-            async for chunk in await self.route_post_deep_chain(guid=guid, input=final_json_output):
+            async for chunk in await self.route_post_deep_chain(guid=guid, input=final_json_output,role_status=role_status):
                 strategy_output += chunk
                 # print(f"{chunk}", end="|", flush=True)
                 yield chunk
@@ -311,8 +324,11 @@ class CharacterAgent(AbstractAgent):
 
     async def event_response(self,llm:BaseLLM,guid:str,event: str) -> AsyncGenerator[str, None]:
         info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
+
+
         info_with_history = info_with_role.replace("{history}",self.history.buffer(guid,20))
-        prompt_template = PromptTemplate(template=info_with_history, input_variables=["event"])
+        info_name = info_with_history.replace("{user}", "大头爸爸")
+        prompt_template = PromptTemplate(template=info_name, input_variables=["event"])
         output_parser = StrOutputParser()
         event_chain = prompt_template | llm | output_parser
         results =""
