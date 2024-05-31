@@ -44,7 +44,7 @@ class UserDatabase:
             session.commit()
         return new_guid
 
-    def add_game_user(self, game_uid: str, username: str = None, email: str = None) -> str:
+    def add_game_user(self, game_uid: str, user_name: str = None,role_name: str = None, email: str = None) -> str:
         """Add a new user to the database or update an existing one by game_id."""
 
 
@@ -57,7 +57,7 @@ class UserDatabase:
             else:
                 # 如果用户不存在，创建新用户
                 new_guid = self.generate_guid()
-                new_user = User(guid=new_guid, username=username, email=email, game_uid=game_uid)
+                new_user = User(guid=new_guid, username=user_name, role_name=role_name, game_uid=game_uid)
                 session.add(new_user)
                 session.commit()
                 return f"新游戏用户已创建，游戏端/game/chat请求路径,uid:{game_uid}；通用/chat请求路径,uid:{new_guid}"

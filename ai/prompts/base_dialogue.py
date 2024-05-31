@@ -25,6 +25,7 @@ KEY：{action_input}
 注意遵循ROLE_STYLE的特征来组织你的回复！！保持内容剧作感，保持流行日本动漫角色的表达风格。
 保证你的回复不超过20个汉字。
 
+
 **回复格式，仅显示FINAL_ANSWER，不要显示其他内容。**
 输入：...
 THOUGHT：...（不显示）
@@ -33,7 +34,9 @@ OBSERVATION：...（不显示）
 FINAL_ANSWER：...
 你遵循上述格式思考，但只输出FINAL_ANSWER。
 
-FINAL_ANSWER的回复不超过30个汉字。
+
+
+FINAL_ANSWER的回复不超过20个汉字。
 
 **开始**
 输入：{input}

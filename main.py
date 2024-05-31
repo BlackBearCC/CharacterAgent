@@ -184,7 +184,7 @@ tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=ll
 @app.post("/create_game_user")
 async def add_game_user(request: GameUser):
     try:
-        result = user_database.add_game_user(game_uid=request.game_uid, username=request.username, email=request.email)
+        result = user_database.add_game_user(game_uid=request.game_uid, user_name=request.user_name,role_name=request.role_name)
         return JSONResponse(content={"message":result})
     except SQLAlchemyError as e:
         logging.error(f"添加游戏用户失败: {str(e)}")
@@ -258,7 +258,7 @@ async def chat_event_generator(uid,user_name,role_name, input_text,role_status:s
 async def generate(request: ChatRequest):
     logging.info(f"游戏端对话请求，uid:{request.uid}.输入:{request.input}")
     user = user_database.get_user_by_game_uid(request.uid)
-    uid =user.guid
+    uid = user.guid
     user_name = user.username
     role_name = user.role_name
     return EventSourceResponse(chat_event_generator(uid, user_name,role_name,request.input,role_status=request.role_status))

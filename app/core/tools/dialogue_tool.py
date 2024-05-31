@@ -8,6 +8,7 @@ from typing import Callable, Dict, Any
 import random
 
 from langchain_community.llms.tongyi import Tongyi
+from langchain_community.vectorstores import Chroma
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import get_buffer_string
 from langchain_core.output_parsers import StrOutputParser
@@ -84,7 +85,6 @@ class EmotionCompanionTool(DialogueTool):
         self.chain = _init_chain(EMOTION_STRATEGY)
 
     async def strategy(self,uid:str, user_name,role_name,user_input: str,role_status:str, action_input: str,strategy_history:str = "") -> Callable:
-        # 获取当前对话历史记录
         final_result = ""
         chat_message_history = SQLChatMessageHistory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
@@ -107,8 +107,10 @@ class FactTransformTool(DialogueTool):
     }
     chain = _init_chain(FACT_TRANSFORM_STRATEGY)
 
+
     async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str, role_status:str,memory: BaseChatMessageHistory=None) -> Callable:
         # memory.chat_memory.add_user_message(user_input)
+
         chat_message_history = SQLChatMessageHistory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
         )

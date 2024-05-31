@@ -47,7 +47,7 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
 
 
-        self.similarity_threshold = 0.42
+        self.similarity_threshold = 0.35
         self.base_info = base_info
 
 
@@ -319,7 +319,7 @@ class CharacterAgent(AbstractAgent):
         prompt_template = PromptTemplate(template=info_with_name, input_variables=[ "history"])
         output_parser = StrOutputParser()
         diary_chain =  prompt_template | self.llm | output_parser
-        async for chunk in diary_chain.astream({"history":self.history.buffer(guid,user_name,role_name,10)}):
+        async for chunk in diary_chain.astream({"history":self.history.buffer(guid,user_name,role_name,100)}):
             yield chunk
 
     async def event_response(self,user_name,role_name,llm:BaseLLM,guid:str,event: str) -> AsyncGenerator[str, None]:
