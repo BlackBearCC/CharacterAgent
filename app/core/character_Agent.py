@@ -75,7 +75,7 @@ class CharacterAgent(AbstractAgent):
 
 
 
-    async def rute_retriever(self, guid:str, query: str,role_status:str=None):
+    async def rute_retriever(self, guid:str,user_name,role_name, query: str,role_status:str=None):
         logging.info("Agent : 检索对话知识库中...")
         docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
         print(docs_and_scores)
@@ -87,12 +87,12 @@ class CharacterAgent(AbstractAgent):
 
         entity = entity_memory.get_entity(guid)
         if not entity :
-            entity = Entity( entity="大头哥哥", summary="", user_guid=guid)
+            entity = Entity( entity=user_name, summary="", user_guid=guid)
 
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
-        history = self.history.buffer(guid,40)
+        history = self.history.buffer(guid,user_name,role_name,40)
 
         if avg_score < self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
@@ -145,7 +145,7 @@ class CharacterAgent(AbstractAgent):
             deep_chain = deep_prompt_template | self.llm | output_parser
             return deep_chain
 
-    async def use_tool_by_name(self,guid:str,role_status:str, action_name: str, action_input: str) -> Any:
+    async def use_tool_by_name(self,guid:str,user_name,role_name,role_status:str, action_name: str, action_input: str) -> Any:
         """
         根据工具名称调用对应工具的方法，并传入action_input。
 
@@ -169,7 +169,7 @@ class CharacterAgent(AbstractAgent):
                 if hasattr(tool_instance, 'strategy'):
 
                     # 根据策略方法的返回类型（异步生成器或协程），进行相应的处理
-                    response_gen = tool_instance.strategy(uid =guid,user_input=self.user_input, action_input=action_input, role_status=role_status)
+                    response_gen = tool_instance.strategy(uid =guid,user_name=user_name,role_name=role_name,user_input=self.user_input, action_input=action_input, role_status=role_status)
                     if inspect.isasyncgen(response_gen):  # 如果是异步生成器
                         return response_gen
                     else:
@@ -190,7 +190,7 @@ class CharacterAgent(AbstractAgent):
         # 如果没有找到匹配的工具或方法，则返回None
         return None
 
-    async def route_post_deep_chain(self, guid:str,input,role_status:str):
+    async def route_post_deep_chain(self, guid:str,user_name,role_name,input,role_status:str):
         """
         根据 deep_chain_output 决定使用哪一个链。
 
@@ -214,9 +214,9 @@ class CharacterAgent(AbstractAgent):
             return None
 
         logging.info("Agent Use Chain: %s", action_name)
-        return await self.use_tool_by_name(guid=guid,action_name=action_name, action_input=action_input,role_status=role_status)
+        return await self.use_tool_by_name(guid=guid,user_name=user_name,role_name=role_name,action_name=action_name, action_input=action_input,role_status=role_status)
 
-    async def response(self, guid:str ,input_text: str,role_status=None) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,user_name,role_name,input_text: str,role_status=None) -> AsyncGenerator[str, None]:
         """
         异步处理用户输入，并生成相应的响应。
 
@@ -228,7 +228,7 @@ class CharacterAgent(AbstractAgent):
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
         # retriever_chain = retriever_lambda
-        retriever_chain =await self.rute_retriever(guid=guid, query=input_text,role_status=role_status)
+        retriever_chain =await self.rute_retriever(guid=guid,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status)
         step_message = ""
         final_output = ""  # 用于存储最终输出字符串
         self.user_input = input_text  # 存储用户输入
@@ -268,7 +268,7 @@ class CharacterAgent(AbstractAgent):
         if isinstance(final_json_output, dict):
             strategy_output = ""
             # 如果输出是字典，则进一步通过深度处理链处理，并累加响应
-            async for chunk in await self.route_post_deep_chain(guid=guid, input=final_json_output,role_status=role_status):
+            async for chunk in await self.route_post_deep_chain(guid=guid,user_name=user_name,role_name=role_name, input=final_json_output,role_status=role_status):
                 strategy_output += chunk
                 # print(f"{chunk}", end="|", flush=True)
                 yield chunk
@@ -295,10 +295,10 @@ class CharacterAgent(AbstractAgent):
 
         print(entity)
         if entity is None:
-            entity = Entity(entity="大头爸爸",summary="是个大头",user_guid=guid)
+            entity = Entity(entity=user_name,summary="",user_guid=guid)
 
         info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
-        entity_with_history = info_with_entity.replace("{history}",self.history.buffer(guid,10))
+        entity_with_history = info_with_entity.replace("{history}",self.history.buffer(guid,user_name=user_name,role_name=role_name,count=10))
         print("info_with_entity",entity_with_history)
         entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
         entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
@@ -311,23 +311,22 @@ class CharacterAgent(AbstractAgent):
         entity_memory.save_entity(guid,entity)
         logging.info(f"Agent 实体更新: {entity}")
         #
-    async def write_diary(self,guid:str,date: str) -> AsyncGenerator[str, None]:
+    async def write_diary(self,user_name,role_name,guid:str,date: str) -> AsyncGenerator[str, None]:
          # 替换配置占位符
         info_with_role = WRITE_DIARY_PROMPT.replace("{role}",self.base_info)
-        info_with_name = info_with_role.replace("{user}", "大头哥").replace("{char}", "兔兔")
+        info_with_name = info_with_role.replace("{user}", user_name).replace("{char}", role_name)
         logging.info(f"Agent Write Diary: {info_with_name}")
         prompt_template = PromptTemplate(template=info_with_name, input_variables=[ "history"])
         output_parser = StrOutputParser()
         diary_chain =  prompt_template | self.llm | output_parser
-        async for chunk in diary_chain.astream({"history":self.history.buffer(guid,10)}):
+        async for chunk in diary_chain.astream({"history":self.history.buffer(guid,user_name,role_name,10)}):
             yield chunk
 
-    async def event_response(self,llm:BaseLLM,guid:str,event: str) -> AsyncGenerator[str, None]:
+    async def event_response(self,user_name,role_name,llm:BaseLLM,guid:str,event: str) -> AsyncGenerator[str, None]:
         info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
-
-
-        info_with_history = info_with_role.replace("{history}",self.history.buffer(guid,20))
-        info_name = info_with_history.replace("{user}", "大头爸爸")
+        info_with_history = info_with_role.replace("{history}",self.history.buffer(guid,user_name,role_name,20))
+        info_name = info_with_history.replace("{user}", user_name)
+        print(info_name)
         prompt_template = PromptTemplate(template=info_name, input_variables=["event"])
         output_parser = StrOutputParser()
         event_chain = prompt_template | llm | output_parser

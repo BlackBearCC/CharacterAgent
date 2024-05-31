@@ -239,49 +239,54 @@ async def add_role_log(request: RoleLog):
 
 
 
-async def chat_event_generator(uid, input_text,role_status:str=None):
+async def chat_event_generator(uid,user_name,role_name, input_text,role_status:str=None):
 
-    async for response_chunk in tuji_agent.response(guid=uid, input_text=input_text,role_status=role_status):
+    async for response_chunk in tuji_agent.response(guid=uid,user_name=user_name,role_name=role_name, input_text=input_text,role_status=role_status):
         print(response_chunk,end="",flush=True)
         yield response_chunk
 
 
 
 
-@app.post("/chat")
-async def generate(request: ChatRequest):
-    logging.info(f"常规请求：{request.input}")
-    return EventSourceResponse(chat_event_generator(request.uid, request.input,role_status=request.role_status))
+# @app.post("/chat")
+# async def generate(request: ChatRequest):
+#     logging.info(f"常规请求：{request.input}")
+#     return EventSourceResponse(chat_event_generator(request.uid, request.input,role_status=request.role_status))
 
 
 @app.post("/game/chat")
 async def generate(request: ChatRequest):
     logging.info(f"游戏端对话请求，uid:{request.uid}.输入:{request.input}")
-    uid = user_database.get_user_by_game_uid(request.uid).guid
+    user = user_database.get_user_by_game_uid(request.uid)
+    uid =user.guid
+    user_name = user.username
+    role_name = user.role_name
+    return EventSourceResponse(chat_event_generator(uid, user_name,role_name,request.input,role_status=request.role_status))
 
-    return EventSourceResponse(chat_event_generator(uid, request.input,role_status=request.role_status))
-
-async def write_diary_event_generator(uid, date):
-    async for response_chunk in tuji_agent.write_diary(guid=uid,date=date):
+async def write_diary_event_generator(uid,user_name,role_name, date):
+    async for response_chunk in tuji_agent.write_diary(guid=uid,user_name=user_name,role_name=role_name,date=date):
         yield response_chunk
 
 
 @app.post("/game/write_diary")
 async def write_diary (request: WriteDiary):
     logging.info(f"游戏端日记请求，uid:{request.uid}")
-    uid = user_database.get_user_by_game_uid(request.uid).guid
-    return EventSourceResponse(write_diary_event_generator(uid, request.date))
+    user = user_database.get_user_by_game_uid(request.uid)
+    uid = user.guid
+    user_name = user.username
+    role_name = user.role_name
+    return EventSourceResponse(write_diary_event_generator(uid, user_name=user_name,role_name=role_name,date=request.date))
 
-@app.post("/write_diary")
-async def write_diary (request: WriteDiary):
-    return EventSourceResponse(write_diary_event_generator(request.uid, request.date))
+# @app.post("/write_diary")
+# async def write_diary (request: WriteDiary):
+#     return EventSourceResponse(write_diary_event_generator(request.uid, request.date))
 
 # @app.post("/login_event")
 # async def login_event(request: ChatRequest):
 #     return EventSourceResponse(chat_event_generator(request.uid, request.input))
 
-async def event_generator(uid:str,llm:BaseLLM, event:str):
-    async for response_chunk in tuji_agent.event_response(guid=uid,llm=llm,event=event):
+async def event_generator(uid:str,user_name,role_name,llm:BaseLLM, event:str):
+    async for response_chunk in tuji_agent.event_response(guid=uid,user_name=user_name,role_name=role_name,llm=llm,event=event):
         yield response_chunk
 
 
@@ -300,7 +305,10 @@ async def generate(request: ChatRequest):
     return EventSourceResponse(sse_generator())
 @app.post("/game/event_response")
 async def event_response(request: EventRequest):
-    uid = user_database.get_user_by_game_uid(request.uid).guid
+    user = user_database.get_user_by_game_uid(request.uid)
+    uid = user.guid
+    user_name = user.username
+    role_name = user.role_name
     event = (
         f"角色状态：{request.role_status}，"
         f"事件: {request.event_name},"
@@ -312,7 +320,7 @@ async def event_response(request: EventRequest):
     # llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
     llm = Tongyi(model_name="qwen-max", temperature=0.7, top_k=100,top_p=0.9, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
     if request.need_response :
-        return EventSourceResponse(event_generator(uid,llm=llm,event=event))
+        return EventSourceResponse(event_generator(uid,user_name=user_name,role_name=role_name,llm=llm,event=event))
 
     else:
         chat_message_history.add_message_with_uid(guid=uid, message=SystemMessage(content=event))

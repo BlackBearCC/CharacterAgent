@@ -177,7 +177,7 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
 
             return messages
 
-    def buffer(self, guid:str,count: int = 100, with_timestamps: bool = True) -> str:
+    def buffer(self, guid:str,user_name="主人",role_name="兔兔",count: int = 100, with_timestamps: bool = True) -> str:
 
             _messages = self.messages(guid,count)
             history_buffer = ""
@@ -186,9 +186,9 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
                 # timestamp = datetime.datetime.fromtimestamp(message.created_at).strftime(
                 #     "%Y-%m-%d %H:%M:%S") if with_timestamps else ""
                 if isinstance(message, HumanMessage):
-                    history_buffer += f"Time:{message.created_at},大头爸爸: {message.content}\n"
+                    history_buffer += f"Time:{message.created_at},{user_name}: {message.content}\n"
                 elif isinstance(message, AIMessage):
-                    history_buffer += f"Time:{message.created_at},兔几妹妹: {message.content}\n"
+                    history_buffer += f"Time:{message.created_at},{role_name}: {message.content}\n"
                 elif isinstance(message, SystemMessage):
                     history_buffer += f"<SYSTEM>:Time:{message.created_at}\n {message.content}\n</SYSTEM>"
             return history_buffer.strip()  # 去掉末尾换行符
