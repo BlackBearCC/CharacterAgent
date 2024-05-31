@@ -32,7 +32,7 @@ from ai.models.system import SystemMessage
 from ai.models.user import UserDatabase
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
-from app.api.models import ChatRequest, WriteDiary, EventRequest, AddGameUser, RoleLog
+from app.api.models import ChatRequest, WriteDiary, EventRequest, GameUser, RoleLog, GameUser
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -182,7 +182,7 @@ tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=ll
 
 
 @app.post("/create_game_user")
-async def add_game_user(request: AddGameUser):
+async def add_game_user(request: GameUser):
     try:
         result = user_database.add_game_user(game_uid=request.game_uid, username=request.username, email=request.email)
         return JSONResponse(content={"message":result})
@@ -191,6 +191,15 @@ async def add_game_user(request: AddGameUser):
         return JSONResponse(status_code=500, content={"error": "添加用户失败."})
 
 @app.post("/update_game_user")
+async def update_game_user(request: GameUser):
+    try:
+        result = user_database.update_game_user(game_uid=request.game_uid,
+                                                         new_user_name=request.user_name,
+                                                         new_role_name=request.role_name)
+        return JSONResponse(content={"message": result})
+    except SQLAlchemyError as e:
+        logging.error(f"更新游戏用户失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="更新用户失败.")
 
 
 @app.post("/game/add_role_log")

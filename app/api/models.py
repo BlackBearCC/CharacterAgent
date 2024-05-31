@@ -6,10 +6,12 @@ from pydantic import BaseModel
 from pydantic import validator,ValidationError
 
 
-class AddGameUser(BaseModel):
+class GameUser(BaseModel):
     game_uid: str
-    username: str = None
-    email: str = None
+    user_name: Optional[str] =  None
+    role_name : Optional[str] = None
+    email: Optional[str] = None
+
 
 class RoleLog(BaseModel):
     uid: str  # 用户id

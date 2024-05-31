@@ -11,7 +11,10 @@ class User(Base):
     __tablename__ = 'user'
 
     guid = Column(String(128), primary_key=True)
-    username = Column(String(50))
+    username = Column(String(50), server_default='主人')  # 设置默认用户名
+    role_name = Column(String(50), server_default='兔兔')  # 设置默认角色名
+
+
     email = Column(String(100))
     game_uid = Column(String(16))
 
@@ -58,6 +61,21 @@ class UserDatabase:
                 session.add(new_user)
                 session.commit()
                 return f"新游戏用户已创建，游戏端/game/chat请求路径,uid:{game_uid}；通用/chat请求路径,uid:{new_guid}"
+
+    def update_game_user(self, game_uid: str, new_user_name: str, new_role_name: str) -> str:
+        """Update the username of an existing user in the database by game_id."""
+
+        with self.Session() as session:
+            existing_user = session.query(User).filter_by(game_uid=game_uid).first()
+
+            if existing_user:
+                # 更新用户名和角色名
+                existing_user.username = new_user_name
+                existing_user.role_name = new_role_name
+                session.commit()
+                return f"用户名和角色名已更新，新的用户名为：{new_user_name}，新的角色名为：{new_role_name}"
+            else:
+                return f"用户不存在，无法更新。请确保游戏ID正确，uid: {game_uid}"
 
 
     def get_user_by_guid(self, guid: str) -> User:
