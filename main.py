@@ -42,6 +42,7 @@ from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool
 from data.database.mysql.database_config import setup_database
 from data.database.mysql.entity_memory import EntityMemory
 from data.database.mysql.message_memory import MessageMemory
+from data.database.mysql.models import Message
 from data.database.mysql.user_management import UserDatabase
 
 from utils.placeholder_replacer import PlaceholderReplacer
@@ -231,40 +232,24 @@ async def update_game_user(request: GameUser, user_db=Depends(get_user_database)
 
 
 @app.post("/game/add_role_log")
-async def add_role_log(request: RoleLog):
+async def add_role_log(request: RoleLog, user_db=Depends(get_user_database), message_memory=Depends(get_message_memory)):
     try:
-        if not request.uid or not request.log:
-            raise HTTPException(status_code=400, detail="UID和LOG不能为空")
-
-        user = user_database.get_user_by_game_uid(request.uid)
-        if user is None:
-            raise HTTPException(status_code=400, detail="用户不存在")
-
-        # 检查create_at是否已提供并转换为datetime对象
-        create_at = None
-        if request.create_at:
-            try:
-                create_at = datetime.strptime(request.create_at, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail="CREATE_AT必须是%Y-%m-%d %H:%M:%S格式"
-                )
-
-        # 使用create_at或None调用add_message_with_uid()
-        chat_message_history.add_message_with_uid(
-            user.guid,
-            SystemMessage(content=request.log, created_at=create_at)
+        # Fetch the user using their game UID
+        user = user_db.get_user_by_game_uid(request.uid)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+        create_at = request.create_at
+        # Attempt to log the message
+        message_memory.add_message(
+            message=Message(user_guid=user.guid,type="system",role="系统事件", message=request.log, created_at=create_at)
         )
 
-        return JSONResponse(content={"message": "系统事件记录成功"})
+        return JSONResponse(content={"message": "系统事件记录成功"}, status_code=status.HTTP_201_CREATED)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logging.error(f"添加系统事件日志异常: {str(e)}")
-        return JSONResponse(status_code=500, content={"message": f"系统错误: {str(e)}"})
-
-
-
-
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"系统错误: {str(e)}")
 
 
 async def chat_event_generator(uid,user_name,role_name, input_text,role_status:str=None):

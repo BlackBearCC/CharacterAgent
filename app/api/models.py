@@ -12,22 +12,19 @@ class GameUser(BaseModel):
     role_name : Optional[str] = None
     email: Optional[str] = None
 
-
 class RoleLog(BaseModel):
-    uid: str  # 用户id
-    create_at: Optional[str] = None
+    uid: str  # 用户 ID
     log: str
+    create_at: Optional[datetime] = None  # 直接使用 datetime 类型
 
-    @validator('create_at')
-    def parse_create_at(cls, v):
-        try:
-            # 使用 dateutil.parser.parse 解析日期时间字符串
-            parsed_date = parse(v)
-            # 确保解析后的日期时间格式与数据库要求的格式一致
-            assert parsed_date.strftime("%Y-%m-%d %H:%M:%S") == v
-            return parsed_date
-        except (ValueError, AssertionError) as e:
-            raise ValidationError("Invalid create_at format.")
+    @validator('create_at', pre=True, allow_reuse=True)
+    def validate_create_at(cls, v):
+        if v:
+            try:
+                return datetime.strptime(v, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise ValueError("CREATE_AT 必须是 %Y-%m-%d %H:%M:%S 格式")
+        return None
 
 
 class ChatRequest(BaseModel):

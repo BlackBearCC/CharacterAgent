@@ -28,6 +28,8 @@ class Message(Base):
     __tablename__ = "message_store"
     id = Column(Integer, primary_key=True)
     user_guid = Column(String(128), ForeignKey('user.guid'))
+    type = Column(String)
+    role = Column(String)
     message = Column(Text)
     created_at = Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))  # Corrected
     generate_from = Column(Text)

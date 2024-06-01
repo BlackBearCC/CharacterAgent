@@ -91,10 +91,6 @@ class DefaultMessageConverter(BaseMessageConverter):
         else:
             message = BaseMessage(content=content)
 
-        # Add the created_at attribute to the message dict
-        # message_dict["data"]["created_at"] = created_at
-        # message.message = json.dumps(message_dict, ensure_ascii=False)
-
         return message
 
 
