@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
 from langchain.text_splitter import CharacterTextSplitter
@@ -41,10 +42,14 @@ from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool
 
 from utils.placeholder_replacer import PlaceholderReplacer
 
+load_dotenv()
+
+database_url = os.getenv('DATABASE_URL')
+tongyi_api_key = os.getenv('TONGYI_API_KEY')
 
 # 创建数据库引擎
-DATABASE_URL = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
-engine = create_engine(DATABASE_URL)
+
+engine = create_engine(database_url)
 
 # 创建Session工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -91,7 +96,7 @@ tuji_info = replacer.replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
 
 
 # 初始化通义模型
-llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key=tongyi_api_key)
 
 #sk-c58751725c2942ff99ceaa4d315d89d2
 
@@ -146,7 +151,7 @@ vectordb = Chroma.from_documents(documents=docs, embedding=embeddings)
 # document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = vectordb.as_retriever()
 
-connection_string = "mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent"
+connection_string = database_url
 user_database = UserDatabase(connection_string)
 # user_database.add_user("test_user", "test_user@example.com")
 
@@ -161,10 +166,10 @@ tools = [
     # TopicTool(),  # 话题激发(先不做)
 ]
 chat_message_history = SQLChatMessageHistory(
-    connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
+    connection_string=database_url
 )
 # fast_llm = Ollama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
-fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key=tongyi_api_key)
 # fast_llm_7b = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
 
 # testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
@@ -315,7 +320,7 @@ async def event_response(request: EventRequest):
         f"事件反馈：{request.event_feedback}，"
         f"预期角色反应：{request.anticipatory_reaction}")
     # llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
-    llm = Tongyi(model_name="qwen-max", temperature=0.7, top_k=100,top_p=0.9, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+    llm = Tongyi(model_name="qwen-max", temperature=0.7, top_k=100,top_p=0.9, dashscope_api_key=tongyi_api_key)
     if request.need_response :
         return EventSourceResponse(event_generator(uid,user_name=user_name,role_name=role_name,llm=llm,event=event))
 
