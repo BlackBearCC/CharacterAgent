@@ -47,7 +47,7 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
 
 
-        self.similarity_threshold = 0.35
+        self.similarity_threshold = 0.38
         self.base_info = base_info
 
 
@@ -97,6 +97,8 @@ class CharacterAgent(AbstractAgent):
         if avg_score < self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
             # Setup chains
+
+
 
             info_with_state = self.character_info.replace("{role_state}", role_status)
             # 替换特殊记忆占位符

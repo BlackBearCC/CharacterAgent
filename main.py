@@ -96,7 +96,7 @@ tuji_info = replacer.replace_dict_placeholders(FAST_CHARACTER_PROMPT, config)
 # 初始化通义模型
 llm = Tongyi(model_name="qwen-max", top_p=0.7, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
-
+#sk-c58751725c2942ff99ceaa4d315d89d2
 
 file_path = "ai/knowledge/conversation_sample"
 
