@@ -60,9 +60,6 @@ def _init_chain(strategy_name,llm=None):
     base_strategy_template = base_strategy.replace("{answer_tendency}", strategy_name)
 
     emotion_template = PromptTemplate(template=base_strategy_template, input_variables=["action_input","input"])
-
-    logging.info(emotion_template)
-
     output_parser = StrOutputParser()
     emotion_chain = emotion_template | llm | output_parser
     return emotion_chain

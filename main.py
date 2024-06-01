@@ -204,7 +204,14 @@ fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key=tongyi_api_key)
 # messages_str = "\n".join([f"Message ID: {msg.id}, Content: {msg.message}" for msg in messages])
 
 base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
-tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm,fast_llm=fast_llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
+tuji_agent = CharacterAgent(base_info=base_info,
+                            character_info=tuji_info,
+                            llm=llm,
+                            fast_llm=fast_llm,
+                            retriever=retriever,
+                            vector_db =vectordb,
+                            tools=tools,
+                            history=chat_message_history)
 
 
 @app.post("/create_game_user")
@@ -252,29 +259,40 @@ async def add_role_log(request: RoleLog, user_db=Depends(get_user_database), mes
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"系统错误: {str(e)}")
 
 
-async def chat_event_generator(uid,user_name,role_name, input_text,role_status:str=None):
-
-    async for response_chunk in tuji_agent.response(guid=uid,user_name=user_name,role_name=role_name, input_text=input_text,role_status=role_status):
-        print(response_chunk,end="",flush=True)
-        yield response_chunk
-
-
-
-
-# @app.post("/chat")
-# async def generate(request: ChatRequest):
-#     logging.info(f"常规请求：{request.input}")
-#     return EventSourceResponse(chat_event_generator(request.uid, request.input,role_status=request.role_status))
-
+async def chat_event_generator(uid, user_name, role_name, input_text, role_status: str = None):
+    try:
+        async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name, input_text=input_text, role_status=role_status):
+            print(response_chunk, end="", flush=True)
+            yield response_chunk
+    except ValueError as ve:
+        logging.error(f"Value error in generating chat response: {ve}")
+        yield f"Error in processing request: {ve}"
+    except ConnectionError as ce:
+        logging.error(f"Connection error with chat service: {ce}")
+        yield "Service temporarily unavailable"
+    except Exception as e:
+        logging.error(f"Unexpected error in chat event generator: {e}")
+        yield "An unexpected error occurred"
 
 @app.post("/game/chat")
-async def generate(request: ChatRequest):
-    logging.info(f"游戏端对话请求，uid:{request.uid}.输入:{request.input}")
-    user = user_database.get_user_by_game_uid(request.uid)
-    uid = user.guid
-    user_name = user.username
-    role_name = user.role_name
-    return EventSourceResponse(chat_event_generator(uid, user_name,role_name,request.input,role_status=request.role_status))
+async def generate(request: ChatRequest, user_db: UserDatabase = Depends(get_user_database)):
+    logging.info(f"Game chat request received, UID: {request.uid}. Input: {request.input}")
+    try:
+        user = user_db.get_user_by_game_uid(request.uid)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        uid = user.guid
+        user_name = user.username
+        role_name = user.role_name
+
+        generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status)
+        return EventSourceResponse(generator, media_type="text/event-stream")
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Failed to initiate chat session: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to initiate chat session")
 
 async def write_diary_event_generator(uid, user_name, role_name, date_range):
     date_start, date_end = date_range
