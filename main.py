@@ -7,7 +7,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 
 from langchain.text_splitter import CharacterTextSplitter
 
@@ -23,14 +23,14 @@ import os
 from langchain_core.language_models import BaseLLM
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, scoped_session
 from sse_starlette import EventSourceResponse
 from starlette.responses import JSONResponse
 
 from ai.models.c_sql import SQLChatMessageHistory
 from ai.models.system import SystemMessage
 
-from ai.models.user import UserDatabase
+
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
 from app.api.models import ChatRequest, WriteDiary, EventRequest, GameUser, RoleLog, GameUser
@@ -39,20 +39,39 @@ from langchain_community.document_loaders import DirectoryLoader
 
 from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, ExpressionTool, InformationTool, \
     OpinionTool, DefenseTool, RepeatTool, Memory_SearchTool
+from data.database.mysql.database_config import setup_database
+from data.database.mysql.entity_memory import EntityMemory
+from data.database.mysql.message_memory import MessageMemory
+from data.database.mysql.user_management import UserDatabase
 
 from utils.placeholder_replacer import PlaceholderReplacer
 
 load_dotenv()
+# 数据库连接字符串，从环境变量或配置文件读取
+DATABASE_CONNECTION_STRING = os.getenv("DATABASE_URL")
+engine = create_engine(DATABASE_CONNECTION_STRING, echo=False)
+Session = scoped_session(sessionmaker(bind=engine))
+setup_database(engine)
+# 创建全局实例
+user_database = UserDatabase(Session)
+message_memory = MessageMemory(Session)
+entity_memory = EntityMemory(Session)
+
+# 依赖函数
+def get_user_database():
+    return user_database
+
+def get_message_memory():
+    return message_memory
+
+def get_entity_memory():
+    return entity_memory
+
+
 
 database_url = os.getenv('DATABASE_URL')
 tongyi_api_key = os.getenv('TONGYI_API_KEY')
 
-# 创建数据库引擎
-
-engine = create_engine(database_url)
-
-# 创建Session工厂
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 app = FastAPI()
 
 
@@ -151,9 +170,12 @@ vectordb = Chroma.from_documents(documents=docs, embedding=embeddings)
 # document_util = DocumentProcessingTool("ai/knowledge/conversation_sample", chunk_size=100, chunk_overlap=20)
 retriever = vectordb.as_retriever()
 
-connection_string = database_url
-user_database = UserDatabase(connection_string)
+
 # user_database.add_user("test_user", "test_user@example.com")
+
+
+
+
 
 tools = [
     EmotionCompanionTool(),  # 情感陪伴
@@ -176,29 +198,36 @@ fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key=tongyi_api_key)
 # history_buffer = chat_message_history.buffer(guid=testuid)
 # print(history_buffer)
 
+# message_memory = MessageMemory(Session())
+# messages = message_memory.get_messages(user_guid="896a7915-aeb4-4bb7-a597-0ddc369efc59", count=20)
+# messages_str = "\n".join([f"Message ID: {msg.id}, Content: {msg.message}" for msg in messages])
+
 base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
 tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm,fast_llm=fast_llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
 
 
 @app.post("/create_game_user")
-async def add_game_user(request: GameUser):
+async def add_game_user(request: GameUser, user_db=Depends(get_user_database)):
     try:
-        result = user_database.add_game_user(game_uid=request.game_uid, user_name=request.user_name,role_name=request.role_name)
-        return JSONResponse(content={"message":result})
-    except SQLAlchemyError as e:
+        result = user_db.add_game_user(game_uid=request.game_uid, username=request.user_name, role_name=request.role_name)
+        return JSONResponse(content={"message": result}, status_code=status.HTTP_201_CREATED)
+    except Exception as e:  # 捕获更广泛的异常，因为数据库层已处理SQLAlchemyError
         logging.error(f"添加游戏用户失败: {str(e)}")
-        return JSONResponse(status_code=500, content={"error": "添加用户失败."})
+        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"error": f"添加游戏用户失败: {str(e)}"})
 
 @app.post("/update_game_user")
-async def update_game_user(request: GameUser):
+async def update_game_user(request: GameUser, user_db=Depends(get_user_database)):
     try:
-        result = user_database.update_game_user(game_uid=request.game_uid,
-                                                         new_user_name=request.user_name,
-                                                         new_role_name=request.role_name)
-        return JSONResponse(content={"message": result})
-    except SQLAlchemyError as e:
+        result = user_db.update_game_user(game_uid=request.game_uid,
+                                          new_user_name=request.user_name,
+                                          new_role_name=request.role_name)
+        if result:
+            return JSONResponse(content={"message": result})
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户未找到.")
+    except Exception as e:
         logging.error(f"更新游戏用户失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="更新用户失败.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"更新游戏用户失败: {str(e)}")
 
 
 @app.post("/game/add_role_log")
