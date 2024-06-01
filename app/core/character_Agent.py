@@ -313,15 +313,16 @@ class CharacterAgent(AbstractAgent):
         entity_memory.save_entity(guid,entity)
         logging.info(f"Agent 实体更新: {entity}")
         #
-    async def write_diary(self,user_name,role_name,guid:str,date: str) -> AsyncGenerator[str, None]:
+    async def write_diary(self,user_name,role_name,guid:str,date_start,date_end) -> AsyncGenerator[str, None]:
          # 替换配置占位符
+        history_buffer = self.history.buffer_with_time(guid,user_name,role_name,date_start,date_end,count=300)
         info_with_role = WRITE_DIARY_PROMPT.replace("{role}",self.base_info)
         info_with_name = info_with_role.replace("{user}", user_name).replace("{char}", role_name)
         logging.info(f"Agent Write Diary: {info_with_name}")
         prompt_template = PromptTemplate(template=info_with_name, input_variables=[ "history"])
         output_parser = StrOutputParser()
         diary_chain =  prompt_template | self.llm | output_parser
-        async for chunk in diary_chain.astream({"history":self.history.buffer(guid,user_name,role_name,100)}):
+        async for chunk in diary_chain.astream({"history":history_buffer}):
             yield chunk
 
     async def event_response(self,user_name,role_name,llm:BaseLLM,guid:str,event: str) -> AsyncGenerator[str, None]:

@@ -193,8 +193,19 @@ class SQLChatMessageHistory(BaseChatMessageHistory):
                     history_buffer += f"<SYSTEM>:Time:{message.created_at}\n {message.content}\n</SYSTEM>"
             return history_buffer.strip()  # 去掉末尾换行符
 
-
-
+    def buffer_with_time(self, guid: str,date_start: datetime, date_end: datetime, user_name="主人", role_name="兔兔",
+                         count: int = 300) -> str:
+        _messages = self.messages(guid, count)
+        history_buffer = ""
+        for message in _messages:
+            if date_start <= message.created_at <= date_end:
+                if isinstance(message, HumanMessage):
+                    history_buffer += f"Time:{message.created_at},{user_name}: {message.content}\n"
+                elif isinstance(message, AIMessage):
+                    history_buffer += f"Time:{message.created_at},{role_name}: {message.content}\n"
+                elif isinstance(message, SystemMessage):
+                    history_buffer += f"<SYSTEM>:Time:{message.created_at}\n {message.content}\n</SYSTEM>"
+        return history_buffer.strip()
 
 
 

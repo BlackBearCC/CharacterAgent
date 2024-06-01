@@ -75,12 +75,9 @@ requests_log.setLevel(logging.CRITICAL)
 handler = logging.root.handlers[0]
 handler.addFilter(SSLFilter())
 
-query = """Tell me a jokeapplication/x-ndjson (NDJSON 或 newline-delimited JSON) 是一种数据格式，用于在HTTP响应或流式传输中发送多个JSON对象。这种格式的特点是每个完整的JSON对象之间用换行符分隔，而不是像普通的JSON数组那样包含在一个大括号中。由于每个对象都是独立的，因此可以逐行解析和处理，而不需要等待整个响应完成。
-当服务器以application/x-ndjson格式发送数据时，的确会按顺序逐行发送。这意味着客户端可以一边接收数据，一边处理每一行，而无需等待所有数据到达。这对于处理大量数据或者实时流数据非常有用，因为它允许数据的即时处理和较低的内存占用。
-如果你遇到服务器似乎只在完全输出完才返回内容的情况，可能有以下几个原因："""
 from langchain_community.llms import Ollama
 
-print("fast_llm=================================================")
+
 # fast_llm = Ollama(model="qwen:32b",temperature=0.5,base_url="http://182.254.242.30:11434")
 # for chunks in fast_llm.stream(query):
 #     print(chunks, end="",flush=True)
@@ -178,9 +175,6 @@ base_info = replacer.replace_dict_placeholders(BASE_CHARACTER_PROMPT, config)
 tuji_agent = CharacterAgent(base_info=base_info,character_info=tuji_info, llm=llm,fast_llm=fast_llm, retriever=retriever,vector_db =vectordb,tools=tools,history=chat_message_history)
 
 
-
-
-
 @app.post("/create_game_user")
 async def add_game_user(request: GameUser):
     try:
@@ -263,19 +257,22 @@ async def generate(request: ChatRequest):
     role_name = user.role_name
     return EventSourceResponse(chat_event_generator(uid, user_name,role_name,request.input,role_status=request.role_status))
 
-async def write_diary_event_generator(uid,user_name,role_name, date):
-    async for response_chunk in tuji_agent.write_diary(guid=uid,user_name=user_name,role_name=role_name,date=date):
+async def write_diary_event_generator(uid, user_name, role_name, date_range):
+    date_start, date_end = date_range
+    async for response_chunk in tuji_agent.write_diary(guid=uid, user_name=user_name, role_name=role_name, date_start=date_start, date_end=date_end):
         yield response_chunk
 
-
 @app.post("/game/write_diary")
-async def write_diary (request: WriteDiary):
+async def write_diary(request: WriteDiary):
     logging.info(f"游戏端日记请求，uid:{request.uid}")
     user = user_database.get_user_by_game_uid(request.uid)
     uid = user.guid
     user_name = user.username
     role_name = user.role_name
-    return EventSourceResponse(write_diary_event_generator(uid, user_name=user_name,role_name=role_name,date=request.date))
+    date_start = datetime.strptime(request.date_start, "%Y-%m-%d %H:%M:%S") if request.date_start else None
+    date_end = datetime.strptime(request.date_end, "%Y-%m-%d %H:%M:%S") if request.date_end else None
+    date_range = (date_start, date_end)
+    return EventSourceResponse(write_diary_event_generator(uid, user_name, role_name, date_range))
 
 # @app.post("/write_diary")
 # async def write_diary (request: WriteDiary):

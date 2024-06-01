@@ -38,7 +38,8 @@ class ChatRequest(BaseModel):
 
 class WriteDiary(BaseModel):
     uid: str  # 用户id
-    date:  Optional[str] = None # 日期
+    date_start:  Optional[str] = None # 日期
+    date_end: Optional[str] = None  # 日期
 
 class EventRequest(BaseModel):
     uid: str  # 用户id
