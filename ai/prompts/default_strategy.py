@@ -102,10 +102,11 @@ OPINION_STRATEGY = """
 """
 
 OPINION_STRATEGY_TASK = """
-根据以下量表形式的观点和对话生成量表评分，采用1.0-5.0的Likert量表评分并解释原因。
+仔细分析最后发表的消息，根据以下量表形式的观点和对话生成量表评分，采用1.0-5.0的Likert量表评分并解释原因。
 如果观点不变则不做任何修改返回原量表，否则保持id不变并在原量表的基础上续写opinion和reason，返回json格式的新量表,评分为Float格式。
 原量表：{input}
 对话：{history}
+最后发表的消息：{last_message}
 新量表：
 <EXAMPLE>
 返回的JSON格式：

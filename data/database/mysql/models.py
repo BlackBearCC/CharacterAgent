@@ -1,6 +1,9 @@
+
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, text
 from datetime import datetime
+
+
 
 Base = declarative_base()
 
@@ -18,8 +21,8 @@ class Entity(Base):
     entity_id = Column(Integer, primary_key=True)
     entity = Column(String(255))
     summary = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now())
+    updated_at = Column(DateTime, default=datetime.now(), onupdate=datetime.now())
     user_guid = Column(String(128), ForeignKey('user.guid'))
 
 
@@ -31,7 +34,7 @@ class Message(Base):
     type = Column(String)
     role = Column(String)
     message = Column(Text)
-    created_at = Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))  # Corrected
+    created_at = Column(DateTime, nullable=False, default=datetime.now(),server_default=text('CURRENT_TIMESTAMP'))  # Corrected
     generate_from = Column(Text)
     call_step = Column(Text)
 

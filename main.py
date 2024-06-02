@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
@@ -39,38 +40,30 @@ from langchain_community.document_loaders import DirectoryLoader
 
 from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, ExpressionTool, InformationTool, \
     OpinionTool, DefenseTool, RepeatTool, Memory_SearchTool
-from data.database.mysql.database_config import setup_database
+from app.service.services import get_user_database, get_message_memory, get_entity_memory, DBContext
 from data.database.mysql.entity_memory import EntityMemory
 from data.database.mysql.message_memory import MessageMemory
+
 from data.database.mysql.models import Message
 from data.database.mysql.user_management import UserDatabase
 
 from utils.placeholder_replacer import PlaceholderReplacer
 
-load_dotenv()
-# 数据库连接字符串，从环境变量或配置文件读取
-DATABASE_CONNECTION_STRING = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_CONNECTION_STRING, echo=False)
-Session = scoped_session(sessionmaker(bind=engine))
-setup_database(engine)
-# 创建全局实例
-user_database = UserDatabase(Session)
-message_memory = MessageMemory(Session)
-entity_memory = EntityMemory(Session)
-
-# 依赖函数
-def get_user_database():
-    return user_database
-
-def get_message_memory():
-    return message_memory
-
-def get_entity_memory():
-    return entity_memory
 
 
 
-database_url = os.getenv('DATABASE_URL')
+# setup_database(engine)
+# # 创建全局实例
+# user_database = UserDatabase(Session)
+# message_memory = MessageMemory(Session)
+# entity_memory = EntityMemory(Session)
+
+
+
+
+
+
+
 tongyi_api_key = os.getenv('TONGYI_API_KEY')
 
 app = FastAPI()
@@ -188,9 +181,7 @@ tools = [
     RepeatTool(),  # 重复表达
     # TopicTool(),  # 话题激发(先不做)
 ]
-chat_message_history = SQLChatMessageHistory(
-    connection_string=database_url
-)
+
 # fast_llm = Ollama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
 fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key=tongyi_api_key)
 # fast_llm_7b = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
@@ -210,12 +201,12 @@ tuji_agent = CharacterAgent(base_info=base_info,
                             fast_llm=fast_llm,
                             retriever=retriever,
                             vector_db =vectordb,
-                            tools=tools,
-                            history=chat_message_history)
+                            tools=tools
+                            )
 
 
 @app.post("/create_game_user")
-async def add_game_user(request: GameUser, user_db=Depends(get_user_database)):
+async def add_game_user(request: GameUser, user_db=Depends( get_user_database)):
     try:
         result = user_db.add_game_user(game_uid=request.game_uid, username=request.user_name, role_name=request.role_name)
         return JSONResponse(content={"message": result}, status_code=status.HTTP_201_CREATED)
@@ -224,7 +215,7 @@ async def add_game_user(request: GameUser, user_db=Depends(get_user_database)):
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"error": f"添加游戏用户失败: {str(e)}"})
 
 @app.post("/update_game_user")
-async def update_game_user(request: GameUser, user_db=Depends(get_user_database)):
+async def update_game_user(request: GameUser, user_db=Depends( get_user_database)):
     try:
         result = user_db.update_game_user(game_uid=request.game_uid,
                                           new_user_name=request.user_name,
@@ -239,7 +230,7 @@ async def update_game_user(request: GameUser, user_db=Depends(get_user_database)
 
 
 @app.post("/game/add_role_log")
-async def add_role_log(request: RoleLog, user_db=Depends(get_user_database), message_memory=Depends(get_message_memory)):
+async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), message_memory=Depends(get_message_memory)):
     try:
         # Fetch the user using their game UID
         user = user_db.get_user_by_game_uid(request.uid)
@@ -259,57 +250,62 @@ async def add_role_log(request: RoleLog, user_db=Depends(get_user_database), mes
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"系统错误: {str(e)}")
 
 
-async def chat_event_generator(uid, user_name, role_name, input_text, role_status: str = None):
-    try:
-        async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name, input_text=input_text, role_status=role_status):
-            print(response_chunk, end="", flush=True)
-            yield response_chunk
-    except ValueError as ve:
-        logging.error(f"Value error in generating chat response: {ve}")
-        yield f"Error in processing request: {ve}"
-    except ConnectionError as ce:
-        logging.error(f"Connection error with chat service: {ce}")
-        yield "Service temporarily unavailable"
-    except Exception as e:
-        logging.error(f"Unexpected error in chat event generator: {e}")
-        yield "An unexpected error occurred"
+async def chat_event_generator(uid, user_name, role_name, input_text, role_status: str ,db_context):
+    # try:
+    async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name, input_text=input_text, role_status=role_status,db_context=db_context):
+        print(response_chunk, end="", flush=True)
+        yield response_chunk
+    # except ValueError as ve:
+    #     logging.error(f"Value error in generating chat response: {ve}")
+    #     yield f"Error in processing request: {ve}"
+    # except ConnectionError as ce:
+    #     logging.error(f"Connection error with chat service: {ce}")
+    #     yield "Service temporarily unavailable"
+    # except Exception as e:
+    #     logging.error(f"Unexpected error in chat event generator: {e}")
+    #     yield "An unexpected error occurred"
 
+
+def get_db_context(user_db: UserDatabase = Depends(get_user_database),
+                   message_memory: MessageMemory = Depends(get_message_memory),
+                   entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
+    return DBContext(user_db=user_db, message_memory=message_memory, entity_memory=entity_memory)
 @app.post("/game/chat")
-async def generate(request: ChatRequest, user_db: UserDatabase = Depends(get_user_database)):
+async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
     logging.info(f"Game chat request received, UID: {request.uid}. Input: {request.input}")
-    try:
-        user = user_db.get_user_by_game_uid(request.uid)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # try:
+    user = db_context.user_db.get_user_by_game_uid(request.uid)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        uid = user.guid
-        user_name = user.username
-        role_name = user.role_name
+    uid = user.guid
+    user_name = user.username
+    role_name = user.role_name
 
-        generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status)
-        return EventSourceResponse(generator, media_type="text/event-stream")
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logging.error(f"Failed to initiate chat session: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to initiate chat session")
+    generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status,db_context=db_context)
+    return EventSourceResponse(generator, media_type="text/event-stream")
+    # except HTTPException as he:
+    #     raise he
+    # except Exception as e:
+    #     logging.error(f"Failed to initiate chat session: {e}")
+    #     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to initiate chat session")
 
-async def write_diary_event_generator(uid, user_name, role_name, date_range):
+async def write_diary_event_generator(uid, user_name, role_name, date_range, db_context: DBContext):
     date_start, date_end = date_range
-    async for response_chunk in tuji_agent.write_diary(guid=uid, user_name=user_name, role_name=role_name, date_start=date_start, date_end=date_end):
+    async for response_chunk in tuji_agent.write_diary(guid=uid, user_name=user_name, role_name=role_name, date_start=date_start, date_end=date_end,db_context=db_context):
         yield response_chunk
 
 @app.post("/game/write_diary")
-async def write_diary(request: WriteDiary):
+async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db_context)):
     logging.info(f"游戏端日记请求，uid:{request.uid}")
-    user = user_database.get_user_by_game_uid(request.uid)
+    user = get_user_database().get_user_by_game_uid(request.uid)
     uid = user.guid
     user_name = user.username
     role_name = user.role_name
     date_start = datetime.strptime(request.date_start, "%Y-%m-%d %H:%M:%S") if request.date_start else None
     date_end = datetime.strptime(request.date_end, "%Y-%m-%d %H:%M:%S") if request.date_end else None
     date_range = (date_start, date_end)
-    return EventSourceResponse(write_diary_event_generator(uid, user_name, role_name, date_range))
+    return EventSourceResponse(write_diary_event_generator(uid, user_name, role_name, date_range,db_context=db_context))
 
 # @app.post("/write_diary")
 # async def write_diary (request: WriteDiary):
@@ -319,27 +315,14 @@ async def write_diary(request: WriteDiary):
 # async def login_event(request: ChatRequest):
 #     return EventSourceResponse(chat_event_generator(request.uid, request.input))
 
-async def event_generator(uid:str,user_name,role_name,llm:BaseLLM, event:str):
-    async for response_chunk in tuji_agent.event_response(guid=uid,user_name=user_name,role_name=role_name,llm=llm,event=event):
+async def event_generator(uid:str,user_name,role_name,llm:BaseLLM, event:str,db_context: DBContext):
+    async for response_chunk in tuji_agent.event_response(guid=uid,user_name=user_name,role_name=role_name,llm=llm,event=event,db_context=db_context):
         yield response_chunk
 
 
-@app.post("/chat_test")
-async def generate(request: ChatRequest):
-
-    url = 'http://182.254.242.30:11434/api/generate'
-    data = {'model': 'qwen:14b', 'prompt': '为什么天空是蓝色，大象有鼻子'}
-    fast_llm = Ollama(model="qwen:14b", temperature=0.5, base_url="http://182.254.242.30:11434")
-    async def sse_generator():
-        for chunks in fast_llm.stream(request.input):
-            print(chunks,end="",flush=True)
-            yield chunks
-
-    # return EventSourceResponse(chat_event_generator(request.uid, request.input))
-    return EventSourceResponse(sse_generator())
 @app.post("/game/event_response")
-async def event_response(request: EventRequest):
-    user = user_database.get_user_by_game_uid(request.uid)
+async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context)):
+    user = get_user_database().get_user_by_game_uid(request.uid)
     uid = user.guid
     user_name = user.username
     role_name = user.role_name
@@ -354,10 +337,10 @@ async def event_response(request: EventRequest):
     # llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
     llm = Tongyi(model_name="qwen-max", temperature=0.7, top_k=100,top_p=0.9, dashscope_api_key=tongyi_api_key)
     if request.need_response :
-        return EventSourceResponse(event_generator(uid,user_name=user_name,role_name=role_name,llm=llm,event=event))
+        return EventSourceResponse(event_generator(uid,user_name=user_name,role_name=role_name,llm=llm,event=event,db_context=db_context))
 
     else:
-        chat_message_history.add_message_with_uid(guid=uid, message=SystemMessage(content=event))
+        get_user_database().add_message_with_uid(guid=uid, message=SystemMessage(content=event))
         return JSONResponse(content={"message":"系统事件记录成功"})
 
 # @app.post("/event_response")

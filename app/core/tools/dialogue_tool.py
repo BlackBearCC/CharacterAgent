@@ -20,6 +20,7 @@ from ai.models.role_memory import OpinionMemory
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY, FACT_TRANSFORM_STRATEGY, EXPRESSION_STRATEGY, \
     INFORMATION_STRATEGY, DEFENSE_STRATEGY, OPINION_STRATEGY, OPINION_STRATEGY_TASK, REPEAT_STRATEGY
+from app.service.services import DBContext
 from utils.placeholder_replacer import PlaceholderReplacer
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,7 +42,7 @@ class DialogueTool(BaseTool):
         await consume_generator()
         return "处理完成"
 
-    def strategy(self, user_input: str,user_name,role_name, action_input: str,memory:ConversationBufferMemory,role_status:str) -> Callable:
+    def strategy(self, user_input: str,user_name,role_name, action_input: str,memory:ConversationBufferMemory,role_status:str,db_context:DBContext) -> Callable:
         """根据查询内容选择合适的策略"""
         raise NotImplementedError
 
@@ -81,12 +82,10 @@ class EmotionCompanionTool(DialogueTool):
         super().__init__()
         self.chain = _init_chain(EMOTION_STRATEGY)
 
-    async def strategy(self,uid:str, user_name,role_name,user_input: str,role_status:str, action_input: str,strategy_history:str = "") -> Callable:
+    async def strategy(self,uid:str, user_name,role_name,user_input: str,role_status:str, action_input: str,db_context: DBContext) -> Callable:
         final_result = ""
-        chat_message_history = SQLChatMessageHistory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-        history = chat_message_history.buffer(guid=uid,user_name=user_name,role_name=role_name,count=50)
+
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
         async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
@@ -105,13 +104,10 @@ class FactTransformTool(DialogueTool):
     chain = _init_chain(FACT_TRANSFORM_STRATEGY)
 
 
-    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str, role_status:str,memory: BaseChatMessageHistory=None) -> Callable:
+    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str, role_status:str,db_context: DBContext) -> Callable:
         # memory.chat_memory.add_user_message(user_input)
 
-        chat_message_history = SQLChatMessageHistory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-        history = chat_message_history.buffer(guid=uid,user_name=user_name,role_name=role_name, count=20)
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
         final_result = ""
         async for chunk in self.chain.astream({"input": user_input, "action_input": action_input, "history": history}):
             final_result += chunk
@@ -130,13 +126,11 @@ class ExpressionTool(DialogueTool):
     }
     chain = _init_chain(EXPRESSION_STRATEGY)
 
-    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,strategy_history:str = "") -> Callable:
+    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
         # 获取当前对话历史记录
         final_result = ""
-        chat_message_history = SQLChatMessageHistory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-        history = chat_message_history.buffer(guid=uid,user_name=user_name,role_name=role_name, count=30)
+
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
         async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
@@ -158,11 +152,9 @@ class InformationTool(DialogueTool):
     }
 
 
-    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,strategy_history:str = "") -> Callable:
-        chat_message_history = SQLChatMessageHistory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-        history = chat_message_history.buffer(guid=uid, user_name=user_name,role_name=role_name,count=20)
+    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
+
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=20)
         # 发送HTTP POST请求
         async with aiohttp.ClientSession() as session:
             # 发送HTTP POST请求
@@ -211,11 +203,9 @@ class OpinionTool(DialogueTool):
     }
     chain = _init_chain(OPINION_STRATEGY)
 
-    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,strategy_history:str = "") -> Callable:
-        chat_message_history = SQLChatMessageHistory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-        history = chat_message_history.buffer(guid=uid,user_name=user_name,role_name=role_name, count=50)
+    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
+
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
         final_result = ""
         action_input_str = json.dumps(action_input)
         action_input_dict = json.loads(action_input_str)
@@ -234,26 +224,22 @@ class OpinionTool(DialogueTool):
         async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
-        await self.opinion_task(uid=uid,action_input=action_input,dialogue_history=final_result,)  # 执行 opinion_task 任务
+        await self.opinion_task(uid=uid,action_input=action_input,user_name=user_name,role_name=role_name,last_message=final_result,db_context=db_context)  # 执行 opinion_task 任务
 
-    async def opinion_task(self,uid:str,action_input: str,dialogue_history:str):
+    async def opinion_task(self,uid:str,action_input: str,user_name,role_name,last_message,db_context: DBContext):
         logging.info("Agent 执行 opinion_task 任务")
         opinion_memory = OpinionMemory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-
-        chat_history= SQLChatMessageHistory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
         )
 
 
         llm = Tongyi(model_name="qwen-max", top_p=0.4,
                      dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
-        prompt_template = PromptTemplate(template=OPINION_STRATEGY_TASK, input_variables=["input","history"])
+        prompt_template = PromptTemplate(template=OPINION_STRATEGY_TASK, input_variables=["input","last_message","history"])
         output_parser = StrOutputParser()
         task_chain = prompt_template | llm | output_parser
         final_chunk = ""
-        async for chunk in task_chain.astream({"input": action_input, "history": chat_history.buffer(guid=uid,count=6)}):
+        async for chunk in task_chain.astream({"input": action_input,"last_message":last_message, "history": db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)}):
             final_chunk+=chunk
             print(chunk, end="",flush=True)
 
@@ -272,13 +258,11 @@ class DefenseTool(DialogueTool):
     }
     chain = _init_chain(DEFENSE_STRATEGY)
 
-    async def strategy(self,uid:str, user_name,role_name,user_input: str, action_input: str,role_status:str,strategy_history:str = "") -> Callable:
+    async def strategy(self,uid:str, user_name,role_name,user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
         # 获取当前对话历史记录
         final_result = ""
-        chat_message_history = SQLChatMessageHistory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-        history = chat_message_history.buffer(guid=uid,user_name=user_name,role_name=role_name, count=15)
+
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=15)
         async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
@@ -293,13 +277,11 @@ class RepeatTool(DialogueTool):
     }
     chain = _init_chain(REPEAT_STRATEGY)
 
-    async def strategy(self,uid:str, user_name,role_name,user_input: str, action_input: str,role_status:str,strategy_history:str = "") -> Callable:
+    async def strategy(self,uid:str, user_name,role_name,user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
         # 获取当前对话历史记录
         final_result = ""
-        chat_message_history = SQLChatMessageHistory(
-            connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent",
-        )
-        history = chat_message_history.buffer(guid=uid, user_name=user_name,role_name=role_name,count=40)
+
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=40)
         async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk

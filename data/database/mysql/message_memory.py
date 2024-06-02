@@ -8,7 +8,7 @@ from sqlalchemy.orm import scoped_session
 from ai.models.ai import AIMessage
 from ai.models.human import HumanMessage
 from ai.models.system import SystemMessage
-from .models import Base, Message
+from data.database.mysql.models import Message
 
 
 class MessageMemory:
@@ -26,42 +26,35 @@ class MessageMemory:
             logging.error(f"Failed to add message: {e}")
             raise
 
-    def get_messages(self, guid: str, count: int = 100) -> List[Message]:
-        """Retrieve messages from the database."""
+    def add_messages(self, messages):
+        """Append the message to the record in db"""
         try:
-            return (self.session.query(Message)
-                    .filter(Message.user_guid == guid)
-                    .order_by(Message.created_at.desc())
-                    .limit(count)
-                    .all())
+            self.session.bulk_save_objects(messages)
+            self.session.commit()
         except Exception as e:
-            logging.error(f"Failed to retrieve messages: {e}")
+            self.session.rollback()
+            logging.error(f"Failed to batch add message: {e}")
             raise
 
-    def buffer(self, guid: str, user_name="主人", role_name="兔兔", count: int = 100,
-               with_timestamps: bool = True) -> str:
-        messages = self.get_messages(guid, count)
-        buffer = ""
-        for message in messages:
-            buffer += self.format_message(message, user_name, role_name)
-        return buffer.strip()
 
-    def buffer_with_time(self, guid: str, date_start: datetime, date_end: datetime, user_name="主人", role_name="兔兔",
-                         count: int = 300) -> str:
-        messages = self.get_messages(guid, count)
-        buffer = ""
-        for message in messages:
-            if date_start <= message.created_at <= date_end:
-                buffer += self.format_message(message, user_name, role_name)
-        return buffer.strip()
+    def get_messages(self, guid, count=100, start_date=None, end_date=None):
+        query = self.session.query(Message).filter(Message.user_guid == guid)
+        if start_date and end_date:
+            query = query.filter(Message.created_at >= start_date, Message.created_at <= end_date)
+        return query.order_by(Message.created_at.desc()).limit(count).all()
+
+    def buffer_messages(self, guid, user_name="主人", role_name="兔兔", count=100, start_date=None, end_date=None):
+        messages = self.get_messages(guid, count, start_date, end_date)
+        return '\n'.join(self.format_message(m, user_name, role_name) for m in messages)
 
     def format_message(self, message, user_name, role_name):
-        if isinstance(message, HumanMessage):
-            return f"Time:{message.created_at},{user_name}: {message.content}\n"
-        elif isinstance(message, AIMessage):
-            return f"Time:{message.created_at},{role_name}: {message.content}\n"
-        elif isinstance(message, SystemMessage):
-            return f"<SYSTEM>:Time:{message.created_at}\n {message.content}\n</SYSTEM>"
-
-
+        # 确保此处逻辑符合实际需要
+        if message.type == "human":
+            return f"EventTime:{message.created_at}, {user_name}: {message.message}"
+        elif message.type == "ai":
+            return f"EventTime:{message.created_at}, {role_name}: {message.message}"
+        elif message.type == "system":
+            return f"<SYSTEM> EventTime:{message.created_at}\n{message.message}</SYSTEM>"
+        else:
+            return f"NORMAL: {message.message}"
 
