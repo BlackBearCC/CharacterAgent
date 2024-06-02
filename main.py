@@ -220,6 +220,7 @@ async def update_game_user(request: GameUser, user_db=Depends( get_user_database
         result = user_db.update_game_user(game_uid=request.game_uid,
                                           new_user_name=request.user_name,
                                           new_role_name=request.role_name)
+
         if result:
             return JSONResponse(content={"message": result})
         else:
@@ -258,15 +259,16 @@ async def chat_event_generator(uid, user_name, role_name, input_text, role_statu
             print(response_chunk, end="", flush=True)
             yield response_chunk
 
+
     except ValueError as ve:
-        logging.error(f"Value error in generating chat response: {ve}")
-        yield f"Error in processing request: {ve}"
+        logging.error(f"生成聊天响应时出现Value错误: {ve}")
+        yield f"处理请求时出错: {ve}"
     except ConnectionError as ce:
-        logging.error(f"Connection error with chat service: {ce}")
-        yield "Service temporarily unavailable"
+        logging.error(f"与聊天服务连接错误: {ce}")
+        yield f"服务暂时不可用: {ce}"
     except Exception as e:
-        logging.error(f"Unexpected error in chat event generator: {e}")
-        yield "An unexpected error occurred"
+        logging.error(f"聊天事件生成器中出现意外错误: {e}")
+        yield f"发生了意外错误: {e}"
 
 
 def get_db_context(user_db: UserDatabase = Depends(get_user_database),
@@ -275,7 +277,7 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
     return DBContext(user_db=user_db, message_memory=message_memory, entity_memory=entity_memory)
 @app.post("/game/chat")
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
-    logging.info(f"Game chat request received, UID: {request.uid}. Input: {request.input}")
+    logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     try:
         user = db_context.user_db.get_user_by_game_uid(request.uid)
         if not user:
@@ -292,8 +294,8 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
     except HTTPException as he:
         raise he
     except Exception as e:
-        logging.error(f"Failed to initiate chat session: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to initiate chat session")
+        logging.error(f"启动聊天会话失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
 
 
 

@@ -52,7 +52,7 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
 
 
-        self.similarity_threshold = 0.38
+        self.similarity_threshold = 0.4
         self.base_info = base_info
 
 
