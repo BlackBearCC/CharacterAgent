@@ -8,7 +8,7 @@ from typing import Any, List, Optional, Union
 
 from sqlalchemy import Column, Integer, Text, Float, create_engine, text, String, ForeignKey, MetaData
 
-from data.database.mysql.base import Base
+from data.database.mysql.models import Base
 
 try:
     from sqlalchemy.orm import declarative_base, sessionmaker

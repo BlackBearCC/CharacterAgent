@@ -2,31 +2,28 @@ import inspect
 import json
 from typing import Any, Dict, List, AsyncGenerator
 
-from langchain.memory import ConversationBufferMemory, ConversationStringBufferMemory
-from langchain.memory.prompt import ENTITY_MEMORY_CONVERSATION_TEMPLATE
-from langchain_community.llms.tongyi import Tongyi
-from langchain_core.chat_history import BaseChatMessageHistory
+
 from langchain_core.language_models import BaseLLM
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 
-from ai.models.ai import AIMessage
+
 from ai.models.buffer import get_prefixed_buffer_string
-from ai.models.c_sql import SQLChatMessageHistory
-from ai.models.human import HumanMessage
+
+
 from ai.models.role_memory import OpinionMemory
-from ai.models.system import SystemMessage
+
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from app.core.abstract_Agent import AbstractAgent
 from app.service.services import DBContext
-from data.database.mysql.entity import  Entity
 
 
 
-from data.database.mysql.models import Message
+
+from data.database.mysql.models import Message, Entity
 from data.database.mysql.user_management import UserDatabase
 
 

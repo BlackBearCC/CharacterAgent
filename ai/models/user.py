@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import uuid
 
-from data.database.mysql.base import Base
+
 
 
 class User(Base):

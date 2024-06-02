@@ -15,7 +15,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSerializable
 
-from ai.models.c_sql import SQLChatMessageHistory
+
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
 from ai.prompts.default_strategy import EMOTION_STRATEGY, FACT_TRANSFORM_STRATEGY, EXPRESSION_STRATEGY, \
