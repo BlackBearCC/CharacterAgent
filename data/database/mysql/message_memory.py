@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from typing import List
 
@@ -48,13 +49,13 @@ class MessageMemory:
         return '\n'.join(self.format_message(m, user_name, role_name) for m in messages)
 
     def format_message(self, message, user_name, role_name):
-        # 确保此处逻辑符合实际需要
+        # 使用正则表达式移除消息中的大括号{}
+        cleaned_message = re.sub(r'\{|\}', '', message.message)
         if message.type == "human":
-            return f"EventTime:{message.created_at}, {user_name}: {message.message}"
+            return f"EventTime:{message.created_at}, {user_name}: {cleaned_message}"
         elif message.type == "ai":
-            return f"EventTime:{message.created_at}, {role_name}: {message.message}"
+            return f"EventTime:{message.created_at}, {role_name}: {cleaned_message}"
         elif message.type == "system":
-            return f"<SYSTEM> EventTime:{message.created_at}\n{message.message}</SYSTEM>"
+            return f"<SYSTEM> EventTime:{message.created_at}\n{cleaned_message}</SYSTEM>"
         else:
-            return f"NORMAL: {message.message}"
-
+            return f"NORMAL: {cleaned_message}"

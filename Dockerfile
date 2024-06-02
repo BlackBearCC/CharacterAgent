@@ -7,11 +7,11 @@ WORKDIR /app
 COPY . /app
 # 复制nltk_data到容器的nltk默认数据目录
 COPY nltk_data /usr/share/nltk_data
-
+COPY .env /app/.env
 
 
 # 安装必要的库
-RUN pip install nltk -i https://pypi.tuna.tsinghua.edu.cn/simple
+#RUN pip install nltk -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 
 # 安装 requirements.txt 中列出的依赖
@@ -20,6 +20,8 @@ RUN pip install nltk -i https://pypi.tuna.tsinghua.edu.cn/simple
 #RUN #pip install sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 让容器监听80端口https://devops.aliyun.com/lingma/login?port=37510&state=2-2375a61148324a3e97bf8f79693af1fa
+
+
 EXPOSE 80
 
 

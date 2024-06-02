@@ -2,11 +2,17 @@ version: '3.9'
 services:
   web:
     build: .
-    command: uvicorn main:app --host 0.0.0.0 --port 80 --reload
+    entrypoint: |
+      pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+      pip install --no-cache-dir uvicorn[standard] fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+      pip install --no-cache-dir sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+      uvicorn main:app --host 0.0.0.0 --port 80 --reload
     volumes:
       - .:/app
     ports:
-      - "8888:80"
-    environment:
-      - DATABASE_URL=mysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent
+      - "8890:80"
+    env_file:
+      - .env
+
+    command: uvicorn main:app --host 0.0.0.0 --port 80 --reload
 
