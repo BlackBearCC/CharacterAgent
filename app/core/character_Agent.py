@@ -52,7 +52,7 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
 
 
-        self.similarity_threshold = 0.4
+        self.similarity_threshold = 0.39
         self.base_info = base_info
 
 
@@ -94,7 +94,7 @@ class CharacterAgent(AbstractAgent):
         print("实体："+entity.entity)
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
-        role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
+        # role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
         history = db_context.message_memory.buffer_messages(guid,user_name,role_name, 100)
         print("message_memory:"+history)
 
@@ -103,15 +103,14 @@ class CharacterAgent(AbstractAgent):
             # Setup chains
             info_with_state = self.character_info.replace("{role_state}", role_status)
             # 替换特殊记忆占位符
-            info_with_special_memory = info_with_state.replace("{special_memory}", f"{entity.entity}:{entity.summary}")
+            info_with_special_memory = info_with_state.replace("{memory_of_user}", f"{entity.entity}:{entity.summary}")
             # 替换环境占位符
             info_with_environment = info_with_special_memory.replace("{environment}",
                                                                      "")
             info_with_opinion = info_with_environment.replace("{opinion}", opinion_memory.buffer(guid, 10))
             info_with_history = info_with_opinion.replace("{history}", history)
-            # print("Agent FastChain 动态信息填充:", info_with_history)
-
-            prompt_template = PromptTemplate(template=info_with_history, input_variables=["classic_scenes", "input"])
+            info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
+            prompt_template = PromptTemplate(template=info_full_name, input_variables=["classic_scenes", "input"])
             output_parser = StrOutputParser()
             setup_and_retrieval = RunnableParallel({"classic_scenes": self.retriever, "input": RunnablePassthrough()})
             fast_chain = setup_and_retrieval | prompt_template | self.fast_llm | output_parser
@@ -123,7 +122,7 @@ class CharacterAgent(AbstractAgent):
             docs = [doc for doc, _ in docs_and_scores]
             output_parser = StrOutputParser()
             # 替换特殊记忆占位符
-            info_with_special_memory = self.tuji_info.replace("{special_memory}", f"{entity.entity}:{entity.summary}")
+            info_with_special_memory = self.tuji_info.replace("{memory_of_user}", f"{entity.entity}:{entity.summary}")
 
             # 替换环境占位符
             info_with_environment = info_with_special_memory.replace("{environment}", "")
@@ -132,10 +131,12 @@ class CharacterAgent(AbstractAgent):
             # 替换观点占位符
             info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(guid,10) )
             # 替换历史占位符
-            tuji_info_with_history = info_with_opinion.replace("{history}", history)
+            info_with_history = info_with_opinion.replace("{history}", history)
+
+            info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
             # 替换工具占位符
             replacer = PlaceholderReplacer()
-            final_prompt = replacer.replace_tools_with_details(tuji_info_with_history, self.tools)
+            final_prompt = replacer.replace_tools_with_details(info_full_name, self.tools)
             deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
             deep_chain = deep_prompt_template | self.llm | output_parser
             return deep_chain

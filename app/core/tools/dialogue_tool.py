@@ -57,10 +57,11 @@ def _init_chain(strategy_name,llm=None):
     with open('ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     base_strategy = replacer.replace_dict_placeholders(BASE_STRATEGY_PROMPT, config)
+
     # base_strategy_with_history = base_strategy.replace("{history}", history)
     base_strategy_template = base_strategy.replace("{answer_tendency}", strategy_name)
 
-    emotion_template = PromptTemplate(template=base_strategy_template, input_variables=["action_input","input"])
+    emotion_template = PromptTemplate(template=base_strategy_template, input_variables=["user","char","memory_of_user","history","action_input","input"])
     output_parser = StrOutputParser()
     emotion_chain = emotion_template | llm | output_parser
     return emotion_chain
@@ -86,7 +87,7 @@ class EmotionCompanionTool(DialogueTool):
         final_result = ""
 
         history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
+        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
 
@@ -109,7 +110,7 @@ class FactTransformTool(DialogueTool):
 
         history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
         final_result = ""
-        async for chunk in self.chain.astream({"input": user_input, "action_input": action_input, "history": history}):
+        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
 
             yield chunk
@@ -126,12 +127,12 @@ class ExpressionTool(DialogueTool):
     }
     chain = _init_chain(EXPRESSION_STRATEGY)
 
-    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
-        # 获取当前对话历史记录
+    async def strategy(self, uid: str, user_name, role_name, user_input: str, action_input: str, role_status: str,
+                       db_context: DBContext) -> Callable:        # 获取当前对话历史记录
         final_result = ""
 
         history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
+        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
 
@@ -151,9 +152,8 @@ class InformationTool(DialogueTool):
         "reply_instruction": "回复的关键词"
     }
 
-
-    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
-
+    async def strategy(self, uid: str, user_name, role_name, user_input: str, action_input: str, role_status: str,
+                       db_context: DBContext) -> Callable:
         history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=20)
         # 发送HTTP POST请求
         async with aiohttp.ClientSession() as session:
@@ -174,18 +174,18 @@ class InformationTool(DialogueTool):
                             data_pairs.append(f"{key}={value}")
 
                     # 拼接成一个字符串
-                    information_with_data = INFORMATION_STRATEGY.replace("{information}", ", ".join(data_pairs))
+                    # information_with_data = INFORMATION_STRATEGY.replace("{information}", ", ".join(data_pairs))
 
-                    print("InformationStrategy:", information_with_data)
+                    # print("InformationStrategy:", information_with_data)
                     llm = Tongyi(model_name="qwen-max", top_p=0.4,
                                  dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
-                    chain = _init_chain( information_with_data,llm)
+                    chain = _init_chain( INFORMATION_STRATEGY,llm)
 
                     # 获取当前对话历史记录
                     final_result = ""
 
                     async for chunk in chain.astream(
-                            {"input": user_input, "action_input": information_with_data, "history": history}):
+                            {"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input, "action_input": data_pairs, "history": history}):
                         final_result += chunk
                         yield chunk
 
@@ -203,8 +203,8 @@ class OpinionTool(DialogueTool):
     }
     chain = _init_chain(OPINION_STRATEGY)
 
-    async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
-
+    async def strategy(self, uid: str, user_name, role_name, user_input: str, action_input: str, role_status: str,
+                       db_context: DBContext) -> Callable:
         history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
         final_result = ""
         action_input_str = json.dumps(action_input)
@@ -221,7 +221,7 @@ class OpinionTool(DialogueTool):
         else:
             logging.error("Agent:观点评价策略-观点 ID is None")
 
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
+        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
         await self.opinion_task(uid=uid,action_input=action_input,user_name=user_name,role_name=role_name,last_message=final_result,db_context=db_context)  # 执行 opinion_task 任务
@@ -258,12 +258,12 @@ class DefenseTool(DialogueTool):
     }
     chain = _init_chain(DEFENSE_STRATEGY)
 
-    async def strategy(self,uid:str, user_name,role_name,user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
-        # 获取当前对话历史记录
+    async def strategy(self, uid: str, user_name, role_name, user_input: str, action_input: str, role_status: str,
+                       db_context: DBContext) -> Callable:        # 获取当前对话历史记录
         final_result = ""
 
         history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=15)
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
+        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
 
@@ -277,12 +277,12 @@ class RepeatTool(DialogueTool):
     }
     chain = _init_chain(REPEAT_STRATEGY)
 
-    async def strategy(self,uid:str, user_name,role_name,user_input: str, action_input: str,role_status:str,db_context: DBContext) -> Callable:
-        # 获取当前对话历史记录
+    async def strategy(self, uid: str, user_name, role_name, user_input: str, action_input: str, role_status: str,
+                       db_context: DBContext) -> Callable:        # 获取当前对话历史记录
         final_result = ""
 
         history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=40)
-        async for chunk in self.chain.astream({"input": user_input,"action_input":action_input, "history": history}):
+        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
             final_result += chunk
             yield chunk
 

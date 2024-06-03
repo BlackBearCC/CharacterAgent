@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, status
 
 from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.chat_models import ChatTongyi
+
 
 from langchain_community.embeddings import OllamaEmbeddings, ModelScopeEmbeddings
 from langchain_community.llms.ollama import Ollama
@@ -184,9 +184,9 @@ tools = [
 
 # fast_llm = Ollama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
 fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key=tongyi_api_key)
-chatLLM = ChatTongyi(
-    streaming=True,
-)
+# chatLLM = ChatTongyi(
+#     streaming=True,
+# )
 
 
 # fast_llm_7b = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
@@ -258,23 +258,23 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
 
 
 async def chat_event_generator(uid, user_name, role_name, input_text, role_status: str ,db_context):
-    try:
-        async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
+    # try:
+    async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
                                                         input_text=input_text, role_status=role_status,
                                                         db_context=db_context):
-            print(response_chunk, end="", flush=True)
-            yield response_chunk
+        print(response_chunk, end="", flush=True)
+        yield response_chunk
 
-
-    except ValueError as ve:
-        logging.error(f"生成聊天响应时出现Value错误: {ve}")
-        yield f"处理请求时出错: {ve}"
-    except ConnectionError as ce:
-        logging.error(f"与聊天服务连接错误: {ce}")
-        yield f"服务暂时不可用: {ce}"
-    except Exception as e:
-        logging.error(f"聊天事件生成器中出现意外错误: {e}")
-        yield f"发生了意外错误: {e}"
+    #
+    # except ValueError as ve:
+    #     logging.error(f"生成聊天响应时出现Value错误: {ve}")
+    #     yield f"处理请求时出错: {ve}"
+    # except ConnectionError as ce:
+    #     logging.error(f"与聊天服务连接错误: {ce}")
+    #     yield f"服务暂时不可用: {ce}"
+    # except Exception as e:
+    #     logging.error(f"聊天事件生成器中出现意外错误: {e}")
+    #     yield f"发生了意外错误: {e}"
 
 
 def get_db_context(user_db: UserDatabase = Depends(get_user_database),
@@ -284,24 +284,24 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
 @app.post("/game/chat")
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
-    try:
-        user = db_context.user_db.get_user_by_game_uid(request.uid)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # try:
+    user = db_context.user_db.get_user_by_game_uid(request.uid)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        uid = user.guid
-        user_name = user.username
-        role_name = user.role_name
+    uid = user.guid
+    user_name = user.username
+    role_name = user.role_name
 
-        generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
+    generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
                                          db_context=db_context)
-        return EventSourceResponse(generator)
+    return EventSourceResponse(generator)
 
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logging.error(f"启动聊天会话失败: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
+    # except HTTPException as he:
+    #     raise he
+    # except Exception as e:
+    #     logging.error(f"启动聊天会话失败: {e}")
+    #     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
 
 
 
