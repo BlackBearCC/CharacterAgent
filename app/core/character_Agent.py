@@ -325,7 +325,7 @@ class CharacterAgent(AbstractAgent):
     async def event_response(self,user_name,role_name,llm:BaseLLM,guid:str,event: str,db_context:DBContext) -> AsyncGenerator[str, None]:
         info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
         info_with_history = info_with_role.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=30))
-        info_name = info_with_history.replace("{user}", user_name)
+        info_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
         # print(info_name)
         prompt_template = PromptTemplate(template=info_name, input_variables=["event"])
         output_parser = StrOutputParser()
