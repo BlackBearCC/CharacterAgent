@@ -11,7 +11,7 @@ from data.database.mysql.user_management import UserDatabase
 load_dotenv()
 # 创建全局数据库引擎
 DATABASE_CONNECTION_STRING = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_CONNECTION_STRING, echo=False)
+engine = create_engine(DATABASE_CONNECTION_STRING,pool_size=16, max_overflow=100, echo=False)
 
 # 创建全局会话工厂
 SessionLocal = scoped_session(sessionmaker(bind=engine))

@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, status
 
 from langchain.text_splitter import CharacterTextSplitter
-
-
+from langchain_community.chat_models import ChatTongyi
 
 from langchain_community.embeddings import OllamaEmbeddings, ModelScopeEmbeddings
 from langchain_community.llms.ollama import Ollama
@@ -22,6 +21,7 @@ from langchain_community.vectorstores import Milvus, Chroma
 import os
 
 from langchain_core.language_models import BaseLLM
+from langchain_core.prompts import ChatPromptTemplate
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -184,6 +184,11 @@ tools = [
 
 # fast_llm = Ollama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
 fast_llm = Tongyi(model_name="qwen-max", dashscope_api_key=tongyi_api_key)
+chatLLM = ChatTongyi(
+    streaming=True,
+)
+
+
 # fast_llm_7b = Ollama(model="qwen:14b",temperature=0.5,base_url="http://182.254.242.30:11434")
 
 # testuid = "98cf155b-d0f5-4129-ae2c-338f6587e74c"
@@ -203,6 +208,7 @@ tuji_agent = CharacterAgent(base_info=base_info,
                             vector_db =vectordb,
                             tools=tools
                             )
+
 
 
 @app.post("/create_game_user")
