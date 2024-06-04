@@ -25,3 +25,4 @@ unstructured
 chromadb
 modelscope
 python-dotenv
+gradio_client

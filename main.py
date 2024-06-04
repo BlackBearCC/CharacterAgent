@@ -1,12 +1,16 @@
 # main.py
 import asyncio
+import hashlib
 import json
 import logging
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from typing import AsyncContextManager
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, status
 
@@ -26,15 +30,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sse_starlette import EventSourceResponse
-from starlette.responses import JSONResponse
-
-
-
-
+from starlette.responses import JSONResponse, FileResponse
 
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
-from app.api.models import ChatRequest, WriteDiary, EventRequest, GameUser, RoleLog, GameUser
+from app.api.models import ChatRequest, WriteDiary, EventRequest, GameUser, RoleLog, GameUser, GenerateSound
 from app.core import CharacterAgent
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -48,7 +48,7 @@ from data.database.mysql.models import Message
 from data.database.mysql.user_management import UserDatabase
 
 from utils.placeholder_replacer import PlaceholderReplacer
-
+from gradio_client import Client
 
 
 
@@ -209,6 +209,47 @@ tuji_agent = CharacterAgent(base_info=base_info,
                             tools=tools
                             )
 
+def get_client():
+    base_url = os.getenv("TTS_API_URL")
+    client = Client(base_url)
+    try:
+        yield client
+    finally:
+        client.close()
+
+@app.post("/generate_sound")
+async def generate_wav(request: GenerateSound,client = Depends(get_client)):
+    first_sentence = request.text.split('.')[0].strip()  # 这里简单地以句号分割获取第一句，根据实际情况调整
+    # 生成8位的唯一ID
+    short_uuid = str(uuid.uuid4())[:8]
+    # 组合文件名
+    file_name = f"{first_sentence}_{short_uuid}.wav"
+
+    try:
+        result = client.predict(
+            "ai/sounds/激动—好耶！《特尔克西的奇幻历险》出发咯！.wav",  # 使用临时文件路径
+            "好耶！《特尔克西的奇幻历险》出发咯",  # 与音频对应的文本
+            "Chinese",  # 语言选项
+            request.text,
+            "Chinese",  # 生成文本的语言
+            "Slice once every 4 sentences",  # 文本切片选项
+            5,  # top_k 参数
+            1,  # top_p 参数
+            1,  # 温度参数
+            False,  # 是否启用无参考模式
+            fn_index=3  # 目标功能的索引
+        )
+        audio_path = result
+        if os.path.isfile(audio_path):
+            logging.info(f"语音合成成功: {request.text}")
+            return FileResponse(audio_path, media_type="audio/wav", filename=file_name)
+        else:
+            return {"error": "Generated audio file not found."}
+    except Exception as e:
+        logging.error(f"语音合成失败: {str(e)}")
+        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"error": f"语音合成失败: {str(e)}"})
+
+
 
 
 @app.post("/create_game_user")
@@ -258,23 +299,22 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
 
 
 async def chat_event_generator(uid, user_name, role_name, input_text, role_status: str ,db_context):
-    # try:
-    async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
+    try:
+        async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
                                                         input_text=input_text, role_status=role_status,
                                                         db_context=db_context):
-        print(response_chunk, end="", flush=True)
-        yield response_chunk
+            print(response_chunk, end="", flush=True)
+            yield response_chunk
 
-    #
-    # except ValueError as ve:
-    #     logging.error(f"生成聊天响应时出现Value错误: {ve}")
-    #     yield f"处理请求时出错: {ve}"
-    # except ConnectionError as ce:
-    #     logging.error(f"与聊天服务连接错误: {ce}")
-    #     yield f"服务暂时不可用: {ce}"
-    # except Exception as e:
-    #     logging.error(f"聊天事件生成器中出现意外错误: {e}")
-    #     yield f"发生了意外错误: {e}"
+    except ValueError as ve:
+        logging.error(f"生成聊天响应时出现Value错误: {ve}")
+        yield f"处理请求时出错: {ve}"
+    except ConnectionError as ce:
+        logging.error(f"与聊天服务连接错误: {ce}")
+        yield f"服务暂时不可用: {ce}"
+    except Exception as e:
+        logging.error(f"聊天事件生成器中出现意外错误: {e}")
+        yield f"发生了意外错误: {e}"
 
 
 def get_db_context(user_db: UserDatabase = Depends(get_user_database),
@@ -284,24 +324,24 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
 @app.post("/game/chat")
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
-    # try:
-    user = db_context.user_db.get_user_by_game_uid(request.uid)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    try:
+        user = db_context.user_db.get_user_by_game_uid(request.uid)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    uid = user.guid
-    user_name = user.username
-    role_name = user.role_name
+        uid = user.guid
+        user_name = user.username
+        role_name = user.role_name
 
-    generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
+        generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
                                          db_context=db_context)
-    return EventSourceResponse(generator)
+        return EventSourceResponse(generator)
 
-    # except HTTPException as he:
-    #     raise he
-    # except Exception as e:
-    #     logging.error(f"启动聊天会话失败: {e}")
-    #     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"启动聊天会话失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
 
 
 

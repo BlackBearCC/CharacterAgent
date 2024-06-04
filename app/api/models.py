@@ -49,3 +49,6 @@ class EventRequest(BaseModel):
     event_description: Optional[str] = None  # 事件详情资料
     event_feedback: Optional[str] = None  # 事件获得的反馈
     anticipatory_reaction: Optional[str] = None  # 预期Ai反应
+
+class GenerateSound(BaseModel):
+    text: str  #要生成的文本
