@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 from typing import AsyncContextManager
 
 import httpx
+import pytz
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, status
 
@@ -49,7 +50,7 @@ from data.database.mysql.user_management import UserDatabase
 
 from utils.placeholder_replacer import PlaceholderReplacer
 from gradio_client import Client
-
+from langchain_community.llms import Ollama
 
 
 # setup_database(engine)
@@ -78,11 +79,12 @@ class SSLFilter(logging.Filter):
             return False
         return True
 
-# 设置日志基本配置
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[RotatingFileHandler('app/app.log', maxBytes=10000, backupCount=5)]
+    handlers=[RotatingFileHandler('app/app.log', maxBytes=1000000, backupCount=10)],
+    datefmt='%Y-%m-%d %H:%M:%S'  # 使用自定义的时间格式
 )
 
 # 配置requests的日志级别
@@ -93,13 +95,6 @@ requests_log.setLevel(logging.CRITICAL)
 handler = logging.root.handlers[0]
 handler.addFilter(SSLFilter())
 
-from langchain_community.llms import Ollama
-
-
-# fast_llm = Ollama(model="qwen:32b",temperature=0.5,base_url="http://182.254.242.30:11434")
-# for chunks in fast_llm.stream(query):
-#     print(chunks, end="",flush=True)
-# 加载JSON配置文件
 with open('ai/prompts/character/tuji.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 

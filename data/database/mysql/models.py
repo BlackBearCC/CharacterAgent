@@ -1,12 +1,6 @@
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, text
-from datetime import datetime
-import pytz
-
-beijing_tz = pytz.timezone('Asia/Shanghai')
-now_beijing_time = datetime.now(beijing_tz)
-
 
 Base = declarative_base()
 
@@ -24,8 +18,10 @@ class Entity(Base):
     entity_id = Column(Integer, primary_key=True)
     entity = Column(String(255))
     summary = Column(String(255))
-    created_at = Column(DateTime, default=datetime.now(beijing_tz))
-    updated_at = Column(DateTime, default=datetime.now(beijing_tz), onupdate=datetime.now(beijing_tz))
+    created_at = Column(DateTime, server_default="CURRENT_TIMESTAMP")
+    updated_at = Column(DateTime, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP'))
+
+
     user_guid = Column(String(128), ForeignKey('user.guid'))
 
 
@@ -37,7 +33,7 @@ class Message(Base):
     type = Column(String)
     role = Column(String)
     message = Column(Text)
-    created_at = Column(DateTime, nullable=False, default=datetime.now(beijing_tz),server_default=text('CURRENT_TIMESTAMP'))  # Corrected
+    created_at = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP")
     generate_from = Column(Text)
     call_step = Column(Text)
 

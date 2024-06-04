@@ -29,4 +29,4 @@ EXPOSE 80
 CMD pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple  && \
     pip install --no-cache-dir uvicorn[standard] fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple && \
     pip install --no-cache-dir sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-    uvicorn main:app --host 0.0.0.0 --port 80 --workers 4
+    uvicorn main:app --host 0.0.0.0 --port 80 --workers 8
