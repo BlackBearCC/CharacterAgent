@@ -17,13 +17,14 @@ from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
+from ai.prompts.task import EVENT_SUMMARY_TEMPLATE
 from app.core.abstract_Agent import AbstractAgent
 from app.service.services import DBContext
 
 
 
 
-from data.database.mysql.models import Message, Entity
+from data.database.mysql.models import Message, Entity, Message_Summary
 from data.database.mysql.user_management import UserDatabase
 
 
@@ -52,7 +53,7 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
 
 
-        self.similarity_threshold = 0.39
+        self.similarity_threshold = 0.365
         self.base_info = base_info
 
 
@@ -95,7 +96,7 @@ class CharacterAgent(AbstractAgent):
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         # role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
-        history = db_context.message_memory.buffer_messages(guid,user_name,role_name, 100)
+        history = db_context.message_memory.buffer_messages(guid,user_name,role_name, 10)
         print("message_memory:"+history)
 
         if avg_score < self.similarity_threshold:
@@ -108,7 +109,11 @@ class CharacterAgent(AbstractAgent):
             info_with_environment = info_with_special_memory.replace("{environment}",
                                                                      "")
             info_with_opinion = info_with_environment.replace("{opinion}", opinion_memory.buffer(guid, 10))
-            info_with_history = info_with_opinion.replace("{history}", history)
+
+            event_recent = info_with_opinion.replace("{recent_event}",
+                                                  db_context.message_summary.buffer_summaries(guid, 20))
+
+            info_with_history = event_recent.replace("{history}", history)
             info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
             prompt_template = PromptTemplate(template=info_full_name, input_variables=["classic_scenes", "input"])
             output_parser = StrOutputParser()
@@ -131,9 +136,13 @@ class CharacterAgent(AbstractAgent):
             # 替换观点占位符
             info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(guid,10) )
             # 替换历史占位符
-            info_with_history = info_with_opinion.replace("{history}", history)
+            event_recent = info_with_opinion.replace("{recent_event}",
+                                                     db_context.message_summary.buffer_summaries(guid, 20))
+
+            info_with_history = event_recent.replace("{history}", history)
 
             info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
+            print("info_full_name:"+info_full_name)
             # 替换工具占位符
             replacer = PlaceholderReplacer()
             final_prompt = replacer.replace_tools_with_details(info_full_name, self.tools)
@@ -281,11 +290,8 @@ class CharacterAgent(AbstractAgent):
             # 如果输出不是字典，则视为快速链输出
             logging.info(f"Agent Fast Chain Output: {final_output}")
             ai_message = Message(user_guid=guid, type="ai", role=role_name, message=final_output,
-                                 generate_from="Chat-FastChain",call_step=step_message)
+                                 generate_from="Chat-FastChain/Deep",call_step=step_message)
             db_context.message_memory.add_message(ai_message)
-            logging.info(f"Agent Fast Chain Output: {final_output}")
-            # self.history.add_message_with_uid(guid=guid,message=AIMessage(content=final_output,generate_from="FastChain" ,call_step=None))
-            pass  # 忽略else块中的pass，避免修改原有代码逻辑
 
         # entity_memory = EntityMemory(
         #     connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
@@ -295,7 +301,7 @@ class CharacterAgent(AbstractAgent):
         if entity is None:
             entity = Entity(entity=user_name,summary="",user_guid=guid)
         info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}",entity.entity)
-        entity_with_history = info_with_entity.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=100))
+        entity_with_history = info_with_entity.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=10))
         entity_with_summary = entity_with_history.replace("{summary}",entity.summary)
         entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"],)
         reflexion_chain = entity_prompt_template | self.fast_llm | output_parser
@@ -309,7 +315,7 @@ class CharacterAgent(AbstractAgent):
         #
     async def write_diary(self,user_name,role_name,guid:str,date_start,date_end,db_context:DBContext) -> AsyncGenerator[str, None]:
          # 替换配置占位符
-        history_buffer = db_context.message_memory.buffer_messages(guid,user_name,role_name,count=100,start_date=date_start,end_date=date_end)
+        history_buffer = db_context.message_memory.buffer_messages(guid,user_name,role_name,count=50,start_date=date_start,end_date=date_end)
         info_with_role = WRITE_DIARY_PROMPT.replace("{role}",self.base_info)
         info_with_name = info_with_role.replace("{user}", user_name).replace("{char}", role_name)
         prompt_template = PromptTemplate(template=info_with_name, input_variables=[ "history"])
@@ -324,16 +330,19 @@ class CharacterAgent(AbstractAgent):
                                                         generate_from="WriteDiary"))
     async def event_response(self,user_name,role_name,llm:BaseLLM,guid:str,event: str,db_context:DBContext) -> AsyncGenerator[str, None]:
         info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
-        info_with_history = info_with_role.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=30))
+        event_recent = info_with_role.replace("{recent_event}",db_context.message_summary.buffer_summaries(guid,20))
+        info_with_history = event_recent.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=10))
         info_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
         # print(info_name)
         prompt_template = PromptTemplate(template=info_name, input_variables=["event"])
         output_parser = StrOutputParser()
         event_chain = prompt_template | llm | output_parser
         results =""
+
         async for chunk in event_chain.astream({"event":event}):
             results+=chunk
             yield chunk
+
         system_message = Message(user_guid=guid, type="system", role="系统事件", message=event,
                              generate_from="SystemEvent")
 
@@ -343,10 +352,36 @@ class CharacterAgent(AbstractAgent):
         logging.info(f"Agent System Event: {event}")
         logging.info(f"Agent System Event Response: {results}")
 
+
         # self.history.add_message_with_uid(guid=guid, message=SystemMessage(content=event))
         # self.history.add_message_with_uid(guid=guid, message=AIMessage(content=results,generate_from="Event"))
 
 
+
+    async def summary(self,user_name,role_name,guid:str,message_threshold:int,db_context:DBContext):
+        print(f"Agent Summary: 判断是否需要生成摘要...")
+        message_content, message_ids =await db_context.message_memory.check_and_buffer_messages(guid, user_name, role_name,
+                                                                                           message_threshold)
+        if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
+            print("生成摘要...")
+
+            prompt_template = PromptTemplate(template=EVENT_SUMMARY_TEMPLATE, input_variables=["history"])
+            output_parser = StrOutputParser()
+            llm = self.llm
+
+            chain = prompt_template | llm | output_parser
+            results = ""
+            async for chunk in chain.astream({"history": message_content}):
+                results += chunk
+
+            # 保存摘要到Message_Summary表，并关联消息ID
+            summary = Message_Summary(user_guid=guid,summary=results)
+            db_context.message_summary.add_summary(message_summary=summary,message_ids=message_ids)
+            logging.info(f"Agent Summary: {summary}")
+            # print(message_summary_id)
+            # db_context.message_memory.bind_summary_id_to_messages(message_ids, message_summary_id)
+        else:
+            print("不需要生成摘要")
 
 
 

@@ -41,11 +41,13 @@ from langchain_community.document_loaders import DirectoryLoader
 
 from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, ExpressionTool, InformationTool, \
     OpinionTool, DefenseTool, RepeatTool, Memory_SearchTool
-from app.service.services import get_user_database, get_message_memory, get_entity_memory, DBContext
+from app.service.services import get_user_database, get_message_memory, get_entity_memory, DBContext, \
+    get_message_summary
 from data.database.mysql.entity_memory import EntityMemory
 from data.database.mysql.message_memory import MessageMemory
+from data.database.mysql.message_summary import MessageSummary
 
-from data.database.mysql.models import Message
+from data.database.mysql.models import Message, Message_Summary
 from data.database.mysql.user_management import UserDatabase
 
 from utils.placeholder_replacer import PlaceholderReplacer
@@ -293,13 +295,14 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"系统错误: {str(e)}")
 
 
-async def chat_event_generator(uid, user_name, role_name, input_text, role_status: str ,db_context):
+async def chat_generator(uid, user_name, role_name, input_text, role_status: str ,db_context):
     try:
         async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
                                                         input_text=input_text, role_status=role_status,
                                                         db_context=db_context):
             print(response_chunk, end="", flush=True)
             yield response_chunk
+
 
     except ValueError as ve:
         logging.error(f"生成聊天响应时出现Value错误: {ve}")
@@ -310,12 +313,15 @@ async def chat_event_generator(uid, user_name, role_name, input_text, role_statu
     except Exception as e:
         logging.error(f"聊天事件生成器中出现意外错误: {e}")
         yield f"发生了意外错误: {e}"
-
+    finally:
+        await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,
+                                 db_context=db_context)
 
 def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    message_memory: MessageMemory = Depends(get_message_memory),
+                   message_summary: MessageSummary = Depends(get_message_summary),
                    entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
-    return DBContext(user_db=user_db, message_memory=message_memory, entity_memory=entity_memory)
+    return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
 @app.post("/game/chat")
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
@@ -328,15 +334,17 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
         user_name = user.username
         role_name = user.role_name
 
-        generator = chat_event_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
-                                         db_context=db_context)
+        generator = chat_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
+                                             db_context=db_context)
         return EventSourceResponse(generator)
+
 
     except HTTPException as he:
         raise he
     except Exception as e:
         logging.error(f"启动聊天会话失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
+
 
 
 
@@ -387,24 +395,37 @@ async def event_response(request: EventRequest,db_context: DBContext = Depends(g
     user_name = user.username
     role_name = user.role_name
     event = (
-        f"角色状态：{request.role_status}，"
+        f"{role_name}的状态：{request.role_status}，"
         f"事件: {request.event_name},"
         f"发生时间：{request.create_at}，"
         f"发生地点：{request.event_location}，"
         f"事件详情：{request.event_description}，"
         f"事件反馈：{request.event_feedback}，"
-        f"预期角色反应：{request.anticipatory_reaction}")
+        f"预期{role_name}反应：{request.anticipatory_reaction}")
+    try:
+        logging.info(f"收到游戏事件请求，UID: {request.uid}。 事件: {request.event_name}")
+        if request.need_response:
+            return EventSourceResponse(
+                event_generator(uid, user_name=user_name, role_name=role_name, llm=llm, event=event,
+                                db_context=db_context))
+
+        else:
+            db_context.message_memory.add_message(
+                Message(user_guid=uid, type="system", role="系统事件", message=event,
+                        generate_from="SystemEvent"))
+            logging.info("System event recorded successfully.")
+            return JSONResponse(content={"message": "系统事件记录成功"})
+    except Exception as e:
+        logging.error(f"游戏事件请求解析失败: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Game event request parse failed")
+    finally:
+        await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,
+                                 db_context=db_context)
+
     # llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
 
-    if request.need_response :
-        return EventSourceResponse(event_generator(uid,user_name=user_name,role_name=role_name,llm=llm,event=event,db_context=db_context))
 
-    else:
-        db_context.message_memory.add_message(
-            Message(user_guid=uid, type="system", role="系统事件", message=event,
-                    generate_from="SystemEvent"))
-        logging.info("System event recorded successfully.")
-        return JSONResponse(content={"message": "系统事件记录成功"})
+
 
 # @app.post("/event_response")
 # async def event_response(request: EventRequest):

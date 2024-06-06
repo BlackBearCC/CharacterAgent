@@ -61,7 +61,7 @@ def _init_chain(strategy_name,llm=None):
     # base_strategy_with_history = base_strategy.replace("{history}", history)
     base_strategy_template = base_strategy.replace("{answer_tendency}", strategy_name)
 
-    emotion_template = PromptTemplate(template=base_strategy_template, input_variables=["user","char","memory_of_user","history","action_input","input"])
+    emotion_template = PromptTemplate(template=base_strategy_template, input_variables=["user","char","memory_of_user","recent_event","history","action_input","input"])
     output_parser = StrOutputParser()
     emotion_chain = emotion_template | llm | output_parser
     return emotion_chain
@@ -86,8 +86,14 @@ class EmotionCompanionTool(DialogueTool):
     async def strategy(self,uid:str, user_name,role_name,user_input: str,role_status:str, action_input: str,db_context: DBContext) -> Callable:
         final_result = ""
 
-        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
-        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=10)
+        async for chunk in self.chain.astream({"user":user_name,
+                                               "char":role_name,
+                                               "memory_of_user":db_context.entity_memory.get_entity(uid),
+                                               "input": user_input,
+                                               "action_input":action_input,
+                                               "recent_event":db_context.message_summary.buffer_summaries(uid,start_date=None,end_date=None,max_count=20),
+                                               "history": history}):
             final_result += chunk
             yield chunk
 
@@ -108,9 +114,18 @@ class FactTransformTool(DialogueTool):
     async def strategy(self,uid:str,user_name,role_name, user_input: str, action_input: str, role_status:str,db_context: DBContext) -> Callable:
         # memory.chat_memory.add_user_message(user_input)
 
-        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=10)
         final_result = ""
-        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
+        async for chunk in self.chain.astream({"user": user_name,
+                                               "char": role_name,
+                                               "memory_of_user": db_context.entity_memory.get_entity(uid),
+                                               "input": user_input,
+                                               "action_input": action_input,
+                                               "recent_event": db_context.message_summary.buffer_summaries(uid,
+                                                                                                           start_date=None,
+                                                                                                           end_date=None,
+                                                                                                           max_count=20),
+                                               "history": history}):
             final_result += chunk
 
             yield chunk
@@ -131,8 +146,17 @@ class ExpressionTool(DialogueTool):
                        db_context: DBContext) -> Callable:        # 获取当前对话历史记录
         final_result = ""
 
-        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
-        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=10)
+        async for chunk in self.chain.astream({"user": user_name,
+                                               "char": role_name,
+                                               "memory_of_user": db_context.entity_memory.get_entity(uid),
+                                               "input": user_input,
+                                               "action_input": action_input,
+                                               "recent_event": db_context.message_summary.buffer_summaries(uid,
+                                                                                                           start_date=None,
+                                                                                                           end_date=None,
+                                                                                                           max_count=20),
+                                               "history": history}):
             final_result += chunk
             yield chunk
 
@@ -148,14 +172,14 @@ class InformationTool(DialogueTool):
     """信息查找策略"""
     name = "信息查找"
     # description = "用于基于历史记忆、固有知识和参考资料回答故事情节、角色设定等问题（冰箱物品数量、物品位置等）回答的策略。避免个人解释或外部来源。"
-    description = "只用于查找冰箱/储物柜物品数量、内容、位置等信息并回答的策略。避免个人解释或外部来源。"
+    description = "只用于查找冰箱/储物柜物品数量、内容、位置等信息并回答的策略。避免个人解释或外部来源。不能查找其他内容"
     params = {
         "reply_instruction": "回复的关键词"
     }
 
     async def strategy(self, uid: str, user_name, role_name, user_input: str, action_input: str, role_status: str,
                        db_context: DBContext) -> Callable:
-        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=20)
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=10)
         # 发送HTTP POST请求
         async with aiohttp.ClientSession() as session:
             # 发送HTTP POST请求
@@ -186,7 +210,7 @@ class InformationTool(DialogueTool):
                     final_result = ""
 
                     async for chunk in chain.astream(
-                            {"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input, "action_input": data_pairs, "history": history}):
+                            {"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input, "action_input": data_pairs,"recent_event": db_context.message_summary.buffer_summaries(uid, start_date=None, end_date=None, max_count=20), "history": history}):
                         final_result += chunk
                         yield chunk
 
@@ -206,7 +230,7 @@ class OpinionTool(DialogueTool):
 
     async def strategy(self, uid: str, user_name, role_name, user_input: str, action_input: str, role_status: str,
                        db_context: DBContext) -> Callable:
-        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=30)
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=10)
         final_result = ""
         action_input_str = json.dumps(action_input)
         action_input_dict = json.loads(action_input_str)
@@ -222,7 +246,16 @@ class OpinionTool(DialogueTool):
         else:
             logging.error("Agent:观点评价策略-观点 ID is None")
 
-        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
+        async for chunk in self.chain.astream({"user": user_name,
+                                               "char": role_name,
+                                               "memory_of_user": db_context.entity_memory.get_entity(uid),
+                                               "input": user_input,
+                                               "action_input": action_input,
+                                               "recent_event": db_context.message_summary.buffer_summaries(uid,
+                                                                                                           start_date=None,
+                                                                                                           end_date=None,
+                                                                                                           max_count=20),
+                                               "history": history}):
             final_result += chunk
             yield chunk
         await self.opinion_task(uid=uid,action_input=action_input,user_name=user_name,role_name=role_name,last_message=final_result,db_context=db_context)  # 执行 opinion_task 任务
@@ -263,8 +296,17 @@ class DefenseTool(DialogueTool):
                        db_context: DBContext) -> Callable:        # 获取当前对话历史记录
         final_result = ""
 
-        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=15)
-        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=10)
+        async for chunk in self.chain.astream({"user": user_name,
+                                               "char": role_name,
+                                               "memory_of_user": db_context.entity_memory.get_entity(uid),
+                                               "input": user_input,
+                                               "action_input": action_input,
+                                               "recent_event": db_context.message_summary.buffer_summaries(uid,
+                                                                                                           start_date=None,
+                                                                                                           end_date=None,
+                                                                                                           max_count=20),
+                                               "history": history}):
             final_result += chunk
             yield chunk
 
@@ -282,8 +324,17 @@ class RepeatTool(DialogueTool):
                        db_context: DBContext) -> Callable:        # 获取当前对话历史记录
         final_result = ""
 
-        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=40)
-        async for chunk in self.chain.astream({"user":user_name,"char":role_name,"memory_of_user":db_context.entity_memory.get_entity(uid),"input": user_input,"action_input":action_input, "history": history}):
+        history = db_context.message_memory.buffer_messages(uid,user_name,role_name,count=10)
+        async for chunk in self.chain.astream({"user": user_name,
+                                               "char": role_name,
+                                               "memory_of_user": db_context.entity_memory.get_entity(uid),
+                                               "input": user_input,
+                                               "action_input": action_input,
+                                               "recent_event": db_context.message_summary.buffer_summaries(uid,
+                                                                                                           start_date=None,
+                                                                                                           end_date=None,
+                                                                                                           max_count=20),
+                                               "history": history}):
             final_result += chunk
             yield chunk
 
