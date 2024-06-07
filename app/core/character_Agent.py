@@ -53,7 +53,8 @@ class CharacterAgent(AbstractAgent):
         self.llm = llm
 
 
-        self.similarity_threshold = 0.365
+        # self.similarity_threshold = 0.365
+        self.similarity_threshold = 666
         self.base_info = base_info
 
 
@@ -142,7 +143,7 @@ class CharacterAgent(AbstractAgent):
             info_with_history = event_recent.replace("{history}", history)
 
             info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
-            print("info_full_name:"+info_full_name)
+            # print("info_full_name:"+info_full_name)
             # 替换工具占位符
             replacer = PlaceholderReplacer()
             final_prompt = replacer.replace_tools_with_details(info_full_name, self.tools)
@@ -358,7 +359,7 @@ class CharacterAgent(AbstractAgent):
 
 
 
-    async def summary(self,user_name,role_name,guid:str,message_threshold:int,db_context:DBContext):
+    async def summary(self,user_name,role_name,guid:str,message_threshold:int,llm,db_context:DBContext):
         print(f"Agent Summary: 判断是否需要生成摘要...")
         message_content, message_ids =await db_context.message_memory.check_and_buffer_messages(guid, user_name, role_name,
                                                                                            message_threshold)
@@ -367,7 +368,6 @@ class CharacterAgent(AbstractAgent):
 
             prompt_template = PromptTemplate(template=EVENT_SUMMARY_TEMPLATE, input_variables=["history"])
             output_parser = StrOutputParser()
-            llm = self.llm
 
             chain = prompt_template | llm | output_parser
             results = ""

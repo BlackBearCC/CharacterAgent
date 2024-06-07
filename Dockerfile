@@ -15,8 +15,8 @@ COPY .env /app/.env
 
 
 # 安装 requirements.txt 中列出的依赖
-#RUN pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-#RUN pip install --no-cache-dir uvicorn[standard] fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir uvicorn[standard] fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple
 #RUN #pip install sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 让容器监听80端口https://devops.aliyun.com/lingma/login?port=37510&state=2-2375a61148324a3e97bf8f79693af1fa
@@ -25,8 +25,7 @@ COPY .env /app/.env
 EXPOSE 80
 
 
-
-CMD pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple  && \
-    pip install --no-cache-dir uvicorn[standard] fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-    pip install --no-cache-dir sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-    uvicorn main:app --host 0.0.0.0 --port 80 --workers 8
+#pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple  && \
+#pip install --no-cache-dir uvicorn[standard] fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+#pip install --no-cache-dir sentence-transformers -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+CMD uvicorn main:app --host 0.0.0.0 --port 80 --workers 4

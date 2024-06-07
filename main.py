@@ -18,7 +18,8 @@ from fastapi import FastAPI, HTTPException, Depends, status
 from langchain.text_splitter import CharacterTextSplitter
 
 
-from langchain_community.embeddings import OllamaEmbeddings, ModelScopeEmbeddings
+from langchain_community.embeddings import OllamaEmbeddings
+#ModelScopeEmbeddings
 from langchain_community.llms.ollama import Ollama
 from langchain_community.llms.tongyi import Tongyi
 from langchain_community.vectorstores import Milvus, Chroma
@@ -122,13 +123,14 @@ text_splitter = CharacterTextSplitter(chunk_size=100, chunk_overlap=20)
 docs = text_splitter.split_documents(documents)
 
 # embedding_model = "thenlper/gte-small-zh"
-embedding_model = "iic/nlp_gte_sentence-embedding_chinese-small"
-# embedding_model = "milkey/gte:large-zh-f16"
+# embedding_model = "iic/nlp_gte_sentence-embedding_chinese-small"
+embedding_model = "milkey/gte:large-zh-f16"
+
 # 创建嵌入模型
 # embedding_model = HuggingFaceEmbeddings(model_name=embedding_model, model_kwargs={'device': "cpu"},
 #                                                 encode_kwargs={'normalize_embeddings': True})
-embeddings = ModelScopeEmbeddings(model_id=embedding_model)
-# embeddings = OllamaEmbeddings(base_url= "http://182.254.242.30:11434", model=embedding_model, temperature=0.5,)
+# embeddings = ModelScopeEmbeddings(model_id=embedding_model)
+embeddings = OllamaEmbeddings(base_url= "http://182.254.242.30:11434", model=embedding_model, temperature=0.5,)
 
 # 构建向量数据库
 vectordb = Chroma.from_documents(documents=docs, embedding=embeddings)
@@ -346,8 +348,6 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
 
 
-
-
 def validate_date(date_string, format="%Y-%m-%d %H:%M:%S"):
     try:
         return datetime.strptime(date_string, format)
@@ -385,8 +385,11 @@ async def event_generator(uid:str,user_name,role_name,llm:BaseLLM, event:str,db_
 async def get_qwen_max_llm() -> BaseLLM:
     return Tongyi(model_name="qwen-max", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=tongyi_api_key)
 
+async def get_qwen_plus() -> BaseLLM:
+    return Tongyi(model_name="qwen-plus", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=tongyi_api_key)
+
 @app.post("/game/event_response")
-async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseLLM = Depends(get_qwen_max_llm)):
+async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseLLM = Depends(get_qwen_plus)):
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -419,7 +422,7 @@ async def event_response(request: EventRequest,db_context: DBContext = Depends(g
         logging.error(f"游戏事件请求解析失败: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Game event request parse failed")
     finally:
-        await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,
+        await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,llm=llm,
                                  db_context=db_context)
 
     # llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
