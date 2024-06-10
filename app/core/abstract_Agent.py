@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from langchain.memory import ConversationBufferMemory
+from langchain_core.language_models import BaseChatModel
 
 
 class AbstractAgent(ABC):
@@ -9,7 +10,7 @@ class AbstractAgent(ABC):
     """
 
     @abstractmethod
-    def response(self,uid:str,user_name,role_name, input_text: str,role_status,db_context) -> str:
+    def response(self,uid:str,user_name,role_name, input_text: str,role_status,db_context,llm:BaseChatModel) -> str:
         """
         处理来自用户的输入，并生成相应的响应。
 

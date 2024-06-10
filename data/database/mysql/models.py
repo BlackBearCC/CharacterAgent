@@ -37,6 +37,7 @@ class Message(Base):
     created_at = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP")
     generate_from = Column(Text)
     call_step = Column(Text)
+    # response_metadata = Column(Text)
     summary_id = Column(Integer, ForeignKey('message_summary_store.id'))  # 添加这一行
 
 

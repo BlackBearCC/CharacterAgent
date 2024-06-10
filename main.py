@@ -227,6 +227,9 @@ async def get_qwen_plus() -> BaseLLM:
 
 async def get_chat_qwen_turbo() -> BaseChatModel:
     return ChatTongyi(model_name="qwen-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
+async def get_chat_qwen_max() -> BaseChatModel:
+    return ChatTongyi(model_name="qwen-max", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
+
 
 async def get_glm3_turbo() -> BaseChatModel:
     return ChatZhipuAI(model_name="glm3-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
@@ -300,7 +303,7 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
         create_at = request.create_at
         # Attempt to log the message
         message_memory.add_message(
-            message=Message(user_guid=user.guid,type="system",role="系统事件", message=request.log, created_at=create_at)
+            message=Message(user_guid=user.guid,type="event",role="系统事件", message=request.log, created_at=create_at)
         )
 
         return JSONResponse(content={"message": "系统事件记录成功"}, status_code=status.HTTP_201_CREATED)
@@ -311,27 +314,28 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"系统错误: {str(e)}")
 
 
-async def chat_generator(uid, user_name, role_name, input_text, role_status: str ,db_context):
-    try:
-        async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
+async def chat_generator(uid, user_name, role_name, input_text, role_status: str ,db_context,llm: BaseChatModel):
+    # try:
+        async for response_chunk in  tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
                                                         input_text=input_text, role_status=role_status,
-                                                        db_context=db_context):
+                                                        db_context=db_context,llm=llm):
             print(response_chunk, end="", flush=True)
             yield response_chunk
 
 
-    except ValueError as ve:
-        logging.error(f"生成聊天响应时出现Value错误: {ve}")
-        yield f"处理请求时出错: {ve}"
-    except ConnectionError as ce:
-        logging.error(f"与聊天服务连接错误: {ce}")
-        yield f"服务暂时不可用: {ce}"
-    except Exception as e:
-        logging.error(f"聊天事件生成器中出现意外错误: {e}")
-        yield f"发生了意外错误: {e}"
-    finally:
-        await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,
-                                 db_context=db_context)
+    # except ValueError as ve:
+    #     logging.error(f"生成聊天响应时出现Value错误: {ve}")
+    #     yield f"处理请求时出错: {ve}"
+    # except ConnectionError as ce:
+    #     logging.error(f"与聊天服务连接错误: {ce}")
+    #     yield f"服务暂时不可用: {ce}"
+    # except Exception as e:
+    #     logging.error(f"聊天事件生成器中出现意外错误: {e}")
+    #     yield f"发生了意外错误: {e}"
+    # finally:
+    #     llm = Tongyi(api_key=tongyi_api_key)
+    #     await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,llm=llm,
+    #                              db_context=db_context)
 
 def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    message_memory: MessageMemory = Depends(get_message_memory),
@@ -339,7 +343,7 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
     return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
 @app.post("/game/chat")
-async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
+async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm:BaseChatModel = Depends(get_chat_qwen_max)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     try:
         user = db_context.user_db.get_user_by_game_uid(request.uid)
@@ -351,6 +355,7 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
         role_name = user.role_name
 
         generator = chat_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
+                                   llm=llm,
                                              db_context=db_context)
         return EventSourceResponse(generator)
 

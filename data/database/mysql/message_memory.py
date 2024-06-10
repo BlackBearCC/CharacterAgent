@@ -53,8 +53,8 @@ class MessageMemory:
         messages = self.get_messages(guid, count, start_date, end_date)
         message_objects = []
 
-        # for msg in reversed(messages):  # Reversing the order to start from the earliest
-        for msg in messages:
+        for msg in reversed(messages):  # Reversing the order to start from the earliest
+        # for msg in messages:
             content = msg.message
             created_at = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
 
