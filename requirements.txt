@@ -26,3 +26,6 @@ chromadb
 
 python-dotenv
 gradio_client
+httpx
+httpx-sse
+PyJWT

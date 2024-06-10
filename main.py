@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, status
 
 from langchain.text_splitter import CharacterTextSplitter
-
+from langchain_community.chat_models import ChatZhipuAI, ChatTongyi
 
 from langchain_community.embeddings import OllamaEmbeddings
 #ModelScopeEmbeddings
@@ -26,8 +26,9 @@ from langchain_community.vectorstores import Milvus, Chroma
 
 import os
 
-from langchain_core.language_models import BaseLLM
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.language_models import BaseLLM, BaseChatModel
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -69,7 +70,7 @@ load_dotenv()
 
 
 tongyi_api_key = os.getenv('DASHSCOPE_API_KEY')
-
+glm_api_key = os.getenv('ZHIPUAI_API_KEY')
 app = FastAPI()
 
 
@@ -376,10 +377,27 @@ async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db
     return EventSourceResponse(
         write_diary_event_generator(uid, user_name, role_name, date_range, db_context=db_context))
 
+# llm = ChatZhipuAI(model_name="glm3-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
+# llm = ChatTongyi(model_name="qwen-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
+# messages = [
+#     HumanMessage(content="你好啊"),
+#
+# ]
+# prompt = ChatPromptTemplate.from_messages(
+#     [
+#         (
+#             "system",
+#             "你扮演一个兔子妹妹",
+#         ),
+#         MessagesPlaceholder(variable_name="messages"),
+#     ]
+# )
+# chain = prompt | llm
+# for r in chain.stream({"messages": messages}):
+#     print(r.content, end="|", flush=True)
 
-async def event_generator(uid:str,user_name,role_name,llm:BaseLLM, event:str,db_context: DBContext):
-    async for response_chunk in tuji_agent.event_response(guid=uid,user_name=user_name,role_name=role_name,llm=llm,event=event,db_context=db_context):
-        yield response_chunk
+
+
 
 
 async def get_qwen_max_llm() -> BaseLLM:
@@ -388,11 +406,33 @@ async def get_qwen_max_llm() -> BaseLLM:
 async def get_qwen_plus() -> BaseLLM:
     return Tongyi(model_name="qwen-plus", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=tongyi_api_key)
 
+async def get_chat_qwen_turbo() -> BaseChatModel:
+    return ChatTongyi(model_name="qwen-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
+
+async def get_glm3_turbo() -> BaseChatModel:
+    return ChatZhipuAI(model_name="glm3-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
+
+async def event_generator(uid:str,user_name,role_name,llm:BaseChatModel, event:str,db_context: DBContext):
+    async for response_chunk in tuji_agent.event_response(guid=uid,user_name=user_name,role_name=role_name,llm=llm,event=event,db_context=db_context):
+        yield response_chunk
+
 @app.post("/game/event_response")
-async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseLLM = Depends(get_qwen_plus)):
+async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_chat_qwen_turbo)):
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # messages = [
+    #     AIMessage(content="Hi."),
+    #     SystemMessage(content="Your role is a poet."),
+    #     HumanMessage(content="Write a short poem about AI in four lines."),
+    # ]
+    # async_chat = ChatZhipuAI(
+    # model="glm-4",
+    # temperature=0.5,
+    # )
+    #
+    # response = await async_chat.agenerate([messages])
+    # print(response)
 
     uid = user.guid
     user_name = user.username

@@ -1,11 +1,13 @@
 import inspect
 import json
+from enum import Enum
 from typing import Any, Dict, List, AsyncGenerator
 
 
-from langchain_core.language_models import BaseLLM
+from langchain_core.language_models import BaseLLM, BaseChatModel
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 
 
@@ -16,6 +18,7 @@ from ai.models.role_memory import OpinionMemory
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
+from ai.prompts.prompt_emum import PromptType
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from ai.prompts.task import EVENT_SUMMARY_TEMPLATE
 from app.core.abstract_Agent import AbstractAgent
@@ -329,33 +332,79 @@ class CharacterAgent(AbstractAgent):
         logging.info(f"Agent Write Diary: {final_diary}")
         db_context.message_memory.add_message(Message(user_guid=guid, type="system", role="系统事件", message=f"{role_name}写了一篇日记：{final_diary}",
                                                         generate_from="WriteDiary"))
-    async def event_response(self,user_name,role_name,llm:BaseLLM,guid:str,event: str,db_context:DBContext) -> AsyncGenerator[str, None]:
-        info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
-        event_recent = info_with_role.replace("{recent_event}",db_context.message_summary.buffer_summaries(guid,20))
-        info_with_history = event_recent.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=10))
-        info_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
-        # print(info_name)
-        prompt_template = PromptTemplate(template=info_name, input_variables=["event"])
-        output_parser = StrOutputParser()
-        event_chain = prompt_template | llm | output_parser
-        results =""
 
-        async for chunk in event_chain.astream({"event":event}):
-            results+=chunk
-            yield chunk
 
-        system_message = Message(user_guid=guid, type="system", role="系统事件", message=event,
-                             generate_from="SystemEvent")
+    async def _generate_system_prompt(self,prompt_type: PromptType,db_context:DBContext,guid:str=None,role=None, user=None,char=None):
+        if prompt_type == PromptType.EVENT:
+            recent_event =db_context.message_summary.buffer_summaries(guid,20)
+            system_prompt = EVENT_PROMPT.format(
+                role=role,
+                recent_event=recent_event,
+                user=user,
+                char=char
+            )
+            return system_prompt
+
+
+
+    async def event_response(self,user_name,role_name,llm:BaseChatModel,guid:str,event: str,db_context:DBContext) -> AsyncGenerator[str, None]:
+        messages = db_context.message_memory.buffer_with_langchain_msg_model(guid,count=10)
+        messages.append(HumanMessage(content=event))
+        print(messages)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system",await self._generate_system_prompt(PromptType.EVENT,db_context,guid,role_name,user_name,role_name)),
+                MessagesPlaceholder(variable_name="message"),
+            ]
+        )
+        chain = prompt | llm
+        results=""
+        response_metadata =None
+        for r in chain.stream({"message": messages}):
+            results += r.content
+            response_metadata=r.response_metadata
+            yield r.content
+
+        response_metadata=json.dumps(response_metadata)
+        system_message = Message(user_guid=guid, type="event", role="系统事件", message=event,
+                             generate_from="game")
 
         ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
-                             generate_from="SystemEvent")
+                             generate_from=response_metadata)
         db_context.message_memory.add_messages([system_message,ai_message])
         logging.info(f"Agent System Event: {event}")
         logging.info(f"Agent System Event Response: {results}")
 
 
-        # self.history.add_message_with_uid(guid=guid, message=SystemMessage(content=event))
-        # self.history.add_message_with_uid(guid=guid, message=AIMessage(content=results,generate_from="Event"))
+
+
+
+        #
+        # info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
+        # event_recent = info_with_role.replace("{recent_event}",db_context.message_summary.buffer_summaries(guid,20))
+        # info_with_history = event_recent.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=10))
+        # info_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
+        # # print(info_name)
+        # prompt_template = PromptTemplate(template=info_name, input_variables=["event"])
+        # output_parser = StrOutputParser()
+        # event_chain = prompt_template | llm | output_parser
+        # results =""
+        #
+        # async for chunk in event_chain.astream({"event":event}):
+        #     results+=chunk
+        #     yield chunk
+        #
+        # system_message = Message(user_guid=guid, type="system", role="系统事件", message=event,
+        #                      generate_from="SystemEvent")
+        #
+        # ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
+        #                      generate_from="SystemEvent")
+        # db_context.message_memory.add_messages([system_message,ai_message])
+        # logging.info(f"Agent System Event: {event}")
+        # logging.info(f"Agent System Event Response: {results}")
+
+
+
 
 
 

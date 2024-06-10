@@ -3,13 +3,11 @@ import re
 from datetime import datetime
 from typing import List, Tuple
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from sqlalchemy import func
 from sqlalchemy.orm import scoped_session
 
-from ai.models.ai import AIMessage
-from ai.models.human import HumanMessage
-from ai.models.system import SystemMessage
+
 from data.database.mysql.models import Message
 
 
@@ -50,6 +48,30 @@ class MessageMemory:
         # 反转消息列表，使其从最早的消息开始
         reversed_messages = reversed(messages)
         return '\n'.join(self.format_message(m, user_name, role_name) for m in reversed_messages)
+
+    def buffer_with_langchain_msg_model(self, guid, count=100, start_date=None, end_date=None):
+        messages = self.get_messages(guid, count, start_date, end_date)
+        message_objects = []
+
+        # for msg in reversed(messages):  # Reversing the order to start from the earliest
+        for msg in messages:
+            content = msg.message
+            created_at = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
+
+            if msg.type == "human":
+                message_object = HumanMessage(content=content, created_at=created_at)
+            elif msg.type == "ai":
+                message_object = AIMessage(content=content, created_at=created_at)
+            elif msg.type == "system":
+                message_object = HumanMessage(content=content, created_at=created_at)
+            elif msg.type == "event":
+                message_object = HumanMessage(content=content, created_at=created_at)
+            else:
+                message_object = BaseMessage(content=content, created_at=created_at)
+
+            message_objects.append(message_object)
+
+        return message_objects
 
     def format_message(self, message, user_name, role_name):
         # 这是一个示例格式化函数，具体实现可能根据你的需求有所不同

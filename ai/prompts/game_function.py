@@ -99,9 +99,6 @@ EVENT_PROMPT = """
 {recent_event}
 </RECENT_EVENT>
 
-<HISTORY>
-{history}
-</HISTORY>
 
 <TASK>
 一步一步思考，在回答中优先关注{user}的情感和行为。找出情感和当前事件的联系，并结合角色设定和状态信息和RECENT_EVENT，HISTORY对发生的事件生成一个回复，以ROLE的第一人称回答
@@ -146,6 +143,5 @@ ROLE_EXPERIENCE只是你的经历，你不需要经常在对话中提起和关�
 
 
 ##START!
-事件：{event}
-回复：
+
 """
