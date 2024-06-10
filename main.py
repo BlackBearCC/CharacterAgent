@@ -217,6 +217,19 @@ def get_client():
     finally:
         client.close()
 
+
+
+async def get_qwen_max_llm() -> BaseLLM:
+    return Tongyi(model_name="qwen-max", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=tongyi_api_key)
+
+async def get_qwen_plus() -> BaseLLM:
+    return Tongyi(model_name="qwen-plus", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=tongyi_api_key)
+
+async def get_chat_qwen_turbo() -> BaseChatModel:
+    return ChatTongyi(model_name="qwen-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
+
+async def get_glm3_turbo() -> BaseChatModel:
+    return ChatZhipuAI(model_name="glm3-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
 @app.post("/generate_sound")
 async def generate_wav(request: GenerateSound,client = Depends(get_client)):
     first_sentence = request.text.split('.')[0].strip()  # 这里简单地以句号分割获取第一句，根据实际情况调整
@@ -354,13 +367,13 @@ def validate_date(date_string, format="%Y-%m-%d %H:%M:%S"):
         return datetime.strptime(date_string, format)
     except ValueError:
         raise ValueError("Incorrect date format, should be YYYY-MM-DD HH:MM:SS")
-async def write_diary_event_generator(uid, user_name, role_name, date_range, db_context: DBContext):
+async def write_diary_event_generator(uid, user_name, role_name, date_range,llm:BaseLLM, db_context: DBContext):
     date_start, date_end = date_range
-    async for response_chunk in tuji_agent.write_diary(guid=uid, user_name=user_name, role_name=role_name, date_start=date_start, date_end=date_end,db_context=db_context):
+    async for response_chunk in tuji_agent.write_diary(guid=uid, user_name=user_name, role_name=role_name, date_start=date_start, date_end=date_end,llm=llm,db_context=db_context):
         yield response_chunk
 
 @app.post("/game/write_diary")
-async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db_context)):
+async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db_context),llm: BaseLLM = Depends(get_qwen_plus)):
     logging.info(f"游戏端日记请求，uid:{request.uid}")
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if not user:
@@ -375,7 +388,7 @@ async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db
     date_range = (date_start, date_end)
 
     return EventSourceResponse(
-        write_diary_event_generator(uid, user_name, role_name, date_range, db_context=db_context))
+        write_diary_event_generator(uid, user_name, role_name, date_range,llm=llm, db_context=db_context))
 
 # llm = ChatZhipuAI(model_name="glm3-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
 # llm = ChatTongyi(model_name="qwen-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
@@ -398,19 +411,6 @@ async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db
 
 
 
-
-
-async def get_qwen_max_llm() -> BaseLLM:
-    return Tongyi(model_name="qwen-max", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=tongyi_api_key)
-
-async def get_qwen_plus() -> BaseLLM:
-    return Tongyi(model_name="qwen-plus", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=tongyi_api_key)
-
-async def get_chat_qwen_turbo() -> BaseChatModel:
-    return ChatTongyi(model_name="qwen-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
-
-async def get_glm3_turbo() -> BaseChatModel:
-    return ChatZhipuAI(model_name="glm3-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
 
 async def event_generator(uid:str,user_name,role_name,llm:BaseChatModel, event:str,db_context: DBContext):
     async for response_chunk in tuji_agent.event_response(guid=uid,user_name=user_name,role_name=role_name,llm=llm,event=event,db_context=db_context):

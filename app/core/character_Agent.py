@@ -317,24 +317,21 @@ class CharacterAgent(AbstractAgent):
         db_context.entity_memory.add_entity(entity)
         logging.info(f"Agent 实体更新: {entity}")
         #
-    async def write_diary(self,user_name,role_name,guid:str,date_start,date_end,db_context:DBContext) -> AsyncGenerator[str, None]:
-         # 替换配置占位符
-        history_buffer = db_context.message_memory.buffer_messages(guid,user_name,role_name,count=50,start_date=date_start,end_date=date_end)
-        info_with_role = WRITE_DIARY_PROMPT.replace("{role}",self.base_info)
-        info_with_name = info_with_role.replace("{user}", user_name).replace("{char}", role_name)
-        prompt_template = PromptTemplate(template=info_with_name, input_variables=[ "history"])
+    async def write_diary(self,user_name,role_name,guid:str,date_start,date_end,llm:BaseLLM,db_context:DBContext) -> AsyncGenerator[str, None]:
+        system_prompt = self._generate_system_prompt(prompt_type=PromptType.WRITE_DIARY,db_context=db_context,guid=guid,role=self.base_info,user=user_name,char=role_name,date_start=date_start,date_end=date_end)
+        prompt_template = PromptTemplate.from_template(system_prompt)
         output_parser = StrOutputParser()
         final_diary = ""
-        diary_chain =  prompt_template | self.llm | output_parser
-        async for chunk in diary_chain.astream({"history":history_buffer}):
+        diary_chain =  prompt_template | llm | output_parser
+        async for chunk in diary_chain.astream({}):
             final_diary += chunk
             yield chunk
-        logging.info(f"Agent Write Diary: {final_diary}")
-        db_context.message_memory.add_message(Message(user_guid=guid, type="system", role="系统事件", message=f"{role_name}写了一篇日记：{final_diary}",
+        logging.info(f"Agent Write Diary: {final_diary[:30]}...")
+        db_context.message_memory.add_message(Message(user_guid=guid, type="event", role="系统事件", message=f"{role_name}写了一篇日记：{final_diary}",
                                                         generate_from="WriteDiary"))
 
 
-    async def _generate_system_prompt(self,prompt_type: PromptType,db_context:DBContext,guid:str=None,role=None, user=None,char=None):
+    def _generate_system_prompt(self,prompt_type: PromptType,db_context:DBContext,guid:str=None,role=None, user=None,char=None,date_start=None,date_end=None):
         if prompt_type == PromptType.EVENT:
             recent_event =db_context.message_summary.buffer_summaries(guid,20)
             system_prompt = EVENT_PROMPT.format(
@@ -344,23 +341,33 @@ class CharacterAgent(AbstractAgent):
                 char=char
             )
             return system_prompt
+        if prompt_type == PromptType.WRITE_DIARY:
+            history_buffer = db_context.message_memory.buffer_messages(guid,user_name=user,role_name=char,count=50,start_date=date_start,end_date=date_end)
+            system_prompt = WRITE_DIARY_PROMPT.format(
+                role=role,
+                user=user,
+                char=char,
+                history=history_buffer
+
+            )
+            return system_prompt
 
 
 
     async def event_response(self,user_name,role_name,llm:BaseChatModel,guid:str,event: str,db_context:DBContext) -> AsyncGenerator[str, None]:
         messages = db_context.message_memory.buffer_with_langchain_msg_model(guid,count=10)
         messages.append(HumanMessage(content=event))
-        print(messages)
+
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system",await self._generate_system_prompt(PromptType.EVENT,db_context,guid,role_name,user_name,role_name)),
+                ("system",self._generate_system_prompt(PromptType.EVENT,db_context,guid,role_name,user_name,role_name)),
                 MessagesPlaceholder(variable_name="message"),
             ]
         )
         chain = prompt | llm
         results=""
         response_metadata =None
-        for r in chain.stream({"message": messages}):
+        async for r in chain.astream({"message": messages}):
             results += r.content
             response_metadata=r.response_metadata
             yield r.content
