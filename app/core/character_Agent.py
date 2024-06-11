@@ -5,7 +5,7 @@ from typing import Any, Dict, List, AsyncGenerator
 
 
 from langchain_core.language_models import BaseLLM, BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
@@ -103,6 +103,7 @@ class CharacterAgent(AbstractAgent):
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         # role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
         history = db_context.message_memory.buffer_messages(guid,user_name,role_name, 10)
+        data_to_send = json.dumps({"action": None, "text": None})
         # print("message_memory:"+history)
         tools = [
             {
@@ -294,8 +295,26 @@ class CharacterAgent(AbstractAgent):
                                 "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
                             }
                         },
-                        "required": ["history_question", "key_role_state", "expression_attitude", "reply_instruction"],
-                    }
+
+                    },
+                    "required": ["history_question", "key_role_state", "expression_attitude", "reply_instruction"],
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "普通回复",
+                    "description": "用于没有合适工具时，直接回复",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "reply_content": {
+                                "type": "string",
+                                "description": "结合人设和上下文信息，遵循你可以调用的tool的description约束，生成你的回复",
+                            }
+                        },
+                    },
+                    "required": ["reply_content"],
                 }
             }
         ]
@@ -306,6 +325,8 @@ class CharacterAgent(AbstractAgent):
             # print("system_prompt:"+system_prompt)
             system_prompt=system_prompt.replace("__classic_scenes__",combined_content)
             messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
+            # last_message = HumanMessage(content=query)
+            # messages.append(last_message)
             print("message_memory:"+str(messages))
             # messages.append(HumanMessage(content=query))
             prompt = ChatPromptTemplate.from_messages(
@@ -314,17 +335,14 @@ class CharacterAgent(AbstractAgent):
                     MessagesPlaceholder(variable_name="message"),
                 ]
             )
-            # chain = prompt | llm
-            # # prompt_template = PromptTemplate(template=system_prompt, input_variables=["classic_scenes", "input"])
-            output_parser = StrOutputParser()
-            # setup_and_retrieval = RunnableParallel({"classic_scenes": self.retriever, "input": RunnablePassthrough()})
             fast_chain = prompt | llm
             results = ""
             response_metadata = None
             async for r in fast_chain.astream({"message": messages}):
                 results += r.content
                 response_metadata = r.response_metadata
-                yield r.content
+                data_to_send = json.dumps({"action": None, "text": r.content}, ensure_ascii=False)
+                yield data_to_send
 
             logging.info(f"Agent Fast Chain Output: {results}")
             ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
@@ -332,28 +350,15 @@ class CharacterAgent(AbstractAgent):
             db_context.message_memory.add_message(ai_message)
 
         else:
-
             print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
-            # output_parser = StrOutputParser()
-            # # 替换特殊记忆占位符
-            # info_with_special_memory = self.tuji_info.replace("{memory_of_user}", f"{entity.entity}:{entity.summary}")
-            #
-            # # 替换环境占位符
-            # info_with_environment = info_with_special_memory.replace("{environment}", "")
-            # # 替换角色状态占位符
-            # info_with_state = info_with_environment.replace("{role_state}", role_status)
-            # # 替换观点占位符
-            # info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(guid,10) )
-            # # 替换历史占位符
-            # event_recent = info_with_opinion.replace("{recent_event}",
-            #                                          db_context.message_summary.buffer_summaries(guid, 20))
-            #
-            # info_with_history = event_recent.replace("{history}", history)
-            #
-            # info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
             llm_kwargs = {"tools": tools, "result_format": "message"}
             system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
             messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
+            # human_message = Message(user_guid=guid, type="human", role=user_name, message="外卖呢下雨没",
+            #                         generate_from="GameUser")
+            # db_context.message_memory.add_message(human_message)
+            # last_message = HumanMessage(content=query)
+            # messages.append(last_message)
 
             # lm_with_tools = llm.bind(**llm_kwargs)
             lm_with_tools = llm.bind(**llm_kwargs)
@@ -365,23 +370,77 @@ class CharacterAgent(AbstractAgent):
                     MessagesPlaceholder(variable_name="message"),
                 ]
             )
-
+            result =""
+            function_name = None
 
             deep_chain = prompt | lm_with_tools
-            # print("info_full_name:"+info_full_name)
-            # 替换工具占位符
-            # replacer = PlaceholderReplacer()
-            # final_prompt = replacer.replace_tools_with_details(info_full_name, self.tools)
-            # deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
-            # deep_chain = deep_prompt_template | llm | output_parser
-            result = ""
-            function_calls = []
-            async for chunk in deep_chain.astream({"message": messages}):
-                result += chunk.content
 
-                yield chunk
-            print(query)
-            print(result)
+            async for chunk in deep_chain.astream({"message": messages}):
+                if chunk.additional_kwargs is None:
+                    yield chunk
+                else:
+                    tool_calls = chunk.additional_kwargs.get('tool_calls', [])
+
+                    for call in tool_calls:
+                        function_data = call.get('function', {})
+                        if function_data.get('name'):
+                            function_name = function_data.get('name')
+                        if function_name == "普通回复" and not None:
+                            chunk = function_data.get('arguments')
+                            result += chunk
+                            data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
+                            yield data_to_send
+                        else:
+                            result += function_data.get('arguments', '')
+                            data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
+                            print()
+                            yield data_to_send
+
+            if  function_name != "普通回复" :
+                try:
+                    arguments_json_array = json.dumps(result, ensure_ascii=False)
+
+                    print("\nArguments解析为JSON成功，内容是:", arguments_json_array)
+                    result = ""
+                    async for chunk in await self.use_tool_by_name(guid=guid,
+                                                                   user_name=user_name,
+                                                                   role_name=role_name,
+                                                                   role_status=role_status,
+                                                                   db_context=db_context,
+                                                                   action_name=function_name,
+                                                                   action_input=arguments_json_array
+                                                                   ):
+                        data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
+                        result += chunk
+                        yield data_to_send
+
+                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
+                                         generate_from=function_name, call_step=json.dumps(arguments_json_array))
+                    db_context.message_memory.add_message(ai_message)
+
+                except json.JSONDecodeError:
+                    data_to_send = json.dumps(
+                        {"action": function_name, "text": "抱歉呢~我收到的信号碎片好像出问题啦...等一等哦"})
+                    yield data_to_send
+                    ai_message = Message(user_guid=guid, type="ai", role=role_name,
+                                         message="抱歉呢~我收到的信号碎片好像出问题啦...等一等哦",
+                                         generate_from=function_name, call_step="Error")
+                    db_context.message_memory.add_message(ai_message)
+                    print("Arguments不是有效的JSON格式，请检查后重试。")
+
+                    # logging.info(f"Agent Deep Chain Output: {strategy_output}")
+            else:
+                try:
+                    result = json.loads(result)
+                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result["reply_content"],
+                                         generate_from=function_name,
+                                         )
+                    db_context.message_memory.add_message(ai_message)
+                except json.JSONDecodeError:
+                    logging.error("普通回复内容不是有效的JSON格式，已存入数据库")
+                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
+                                         generate_from=function_name, call_step="Error")
+                    db_context.message_memory.add_message(ai_message)
 
             # return deep_chain
     @tool
