@@ -9,7 +9,8 @@ from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
-
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 
 from ai.models.buffer import get_prefixed_buffer_string
 
@@ -57,7 +58,7 @@ class CharacterAgent(AbstractAgent):
 
 
         # self.similarity_threshold = 0.365
-        self.similarity_threshold = 700
+        self.similarity_threshold = 888
         self.base_info = base_info
 
 
@@ -82,10 +83,6 @@ class CharacterAgent(AbstractAgent):
 
 
 
-
-
-
-
     async def rute_retriever(self, guid:str,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm:BaseChatModel)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
         docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
@@ -107,8 +104,203 @@ class CharacterAgent(AbstractAgent):
         # role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
         history = db_context.message_memory.buffer_messages(guid,user_name,role_name, 10)
         # print("message_memory:"+history)
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "情感陪伴",
+                    "description": "当你判断用户需要情感陪伴时非常有用",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "emotion_status": {
+                                "type": "string",
+                                "description": "用户情感状态",
+                            },
+                            "emotion_intensity": {
+                                "type": "string",
+                                "description": "用户情感强度",
+                            },
+                            "user_needs": {
+                                "type": "string",
+                                "description": "分析的用户现在真实需求",
+                            },
+                            "critical_context": {
+                                "type": "string",
+                                "description": "可参考的关键上下文信息",
+                            },
+                            "reply_instruction": {
+                                "type": "string",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                            }
+                        },
 
-        if avg_score < self.similarity_threshold:
+                    },
+                    "required": ["emotion_status", "emotion_intensity", "user_needs","critical_context", "reply_instruction"],
+
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "事实转换",
+                    "description": "当你需要将现实世界的信息（著名人物、地点、事件、物品等）转化为角色视角下的对应物时非常有用",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "real_world_entity": {
+                                "type": "string",
+                                "description": "需要转换的现实世界实体（人物、地点、事件、物品）"
+                            },
+                            "character_perspective": {
+                                "type": "string",
+                                "description": "你的角色视角或背景中的所能对应的实体"
+                            },
+                            "reply_instruction": {
+                                "type": "string",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                            }
+                        }
+                    },
+                    "required": ["real_world_entity", "character_perspective", "reply_instruction"],
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "表达诉求",
+                    "description": "当你需要基于自身状态和马斯洛需求理论的需求层级表达自身诉求时非常有用",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "current_role_state": {
+                                "type": "string",
+                                "description": "角色自身当前的状态"
+                            },
+                            "maslow_hierarchy_level": {
+                                "type": "string",
+                                "description": "需求层级，根据马斯洛需求层次理论"
+                            },
+                            "reply_instruction": {
+                                "type": "string",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                            }
+                        }
+                    },
+                    "required": ["current_role_state", "maslow_hierarchy_level", "reply_instruction"],
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "信息查找",
+                    "description": "查找和回答有关冰箱或储物柜内物品的具体信息，如数量、内容、位置等。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "storage_type": {
+                                "type": "string",
+                                "description": "储存类型（冰箱或储物柜）"
+                            },
+                        },
+                        "reply_instruction": {
+                            "type": "string",
+                            "description": "结合人设和上下文，指派查询到结果后的关键内容（不超过10个字，不可以查询结果！）",
+                        }
+                    },
+                    "required": ["storage_type","reply_instruction"],
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "观点评价",
+                    "description": "对特定观点或实体发表评价，并用1-5的Likert量表进行评分。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "opinion_id": {
+                                "type": "int",
+                                "description": "引用观点的ID"
+                            },
+                            "entity_or_opinion": {
+                                "type": "string",
+                                "description": "被评价的实体或观点"
+                            },
+                            "evaluation_scale": {
+                                "type": "string",
+                                "description": "评价的Likert量表范围（1-5）"
+                            },
+                            "evaluation_reason": {
+                                "type": "string",
+                                "description": "评价的原因"
+                            },
+                            "reply_instruction": {
+                                "type": "string",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                            }
+                        }
+                    },
+                    "required": ["opinion_id", "entity_or_opinion", "evaluation_scale", "evaluation_reason","reply_instruction"]
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "防御对话",
+                    "description": "当面对攻击或诱导时保护对话的策略，保持角色的核心属性和知识范围。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "attack_type": {
+                                "type": "string",
+                                "description": "攻击或诱导对话的类型及内容"
+                            },
+                            "core_attributes": {
+                                "type": "string",
+                                "description": "角色的核心属性"
+                            },
+                            "reply_instruction": {
+                                "type": "string",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                            }
+                        },
+                    },
+                    "required": ["attack_type", "core_attributes", "reply_instruction"]
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "重复表达",
+                    "description": "当你发现用户重复提问时非常有用，对历史中已经回答过且重复的问题进行回应，展示角色的情绪和态度。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "history_question": {
+                                "type": "string",
+                                "description": "历史中已回答过的问题"
+                            },
+                            "key_role_state": {
+                                "type": "string",
+                                "description": "角色自身的关键状态"
+                            },
+                            "expression_attitude": {
+                                "type": "string",
+                                "description": "综合考虑角色对重复问题的情绪和态度"
+                            },
+                            "reply_instruction": {
+                                "type": "string",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                            }
+                        },
+                        "required": ["history_question", "key_role_state", "expression_attitude", "reply_instruction"],
+                    }
+                }
+            }
+        ]
+
+        if avg_score > self.similarity_threshold:
             print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
             system_prompt = self._generate_system_prompt(prompt_type=PromptType.FAST_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
             # print("system_prompt:"+system_prompt)
@@ -140,38 +332,63 @@ class CharacterAgent(AbstractAgent):
             db_context.message_memory.add_message(ai_message)
 
         else:
+
             print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
             # output_parser = StrOutputParser()
-            # 替换特殊记忆占位符
-            info_with_special_memory = self.tuji_info.replace("{memory_of_user}", f"{entity.entity}:{entity.summary}")
+            # # 替换特殊记忆占位符
+            # info_with_special_memory = self.tuji_info.replace("{memory_of_user}", f"{entity.entity}:{entity.summary}")
+            #
+            # # 替换环境占位符
+            # info_with_environment = info_with_special_memory.replace("{environment}", "")
+            # # 替换角色状态占位符
+            # info_with_state = info_with_environment.replace("{role_state}", role_status)
+            # # 替换观点占位符
+            # info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(guid,10) )
+            # # 替换历史占位符
+            # event_recent = info_with_opinion.replace("{recent_event}",
+            #                                          db_context.message_summary.buffer_summaries(guid, 20))
+            #
+            # info_with_history = event_recent.replace("{history}", history)
+            #
+            # info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
+            llm_kwargs = {"tools": tools, "result_format": "message"}
+            system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
+            messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
 
-            # 替换环境占位符
-            info_with_environment = info_with_special_memory.replace("{environment}", "")
-            # 替换角色状态占位符
-            info_with_state = info_with_environment.replace("{role_state}", role_status)
-            # 替换观点占位符
-            info_with_opinion =  info_with_state.replace("{opinion}",opinion_memory.buffer(guid,10) )
-            # 替换历史占位符
-            event_recent = info_with_opinion.replace("{recent_event}",
-                                                     db_context.message_summary.buffer_summaries(guid, 20))
+            # lm_with_tools = llm.bind(**llm_kwargs)
+            lm_with_tools = llm.bind(**llm_kwargs)
+            print("message_memory:" + str(messages))
+            # messages.append(HumanMessage(content=query))
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", system_prompt),
+                    MessagesPlaceholder(variable_name="message"),
+                ]
+            )
 
-            info_with_history = event_recent.replace("{history}", history)
 
-            info_full_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
-            system_prompt = self._generate_system_prompt(prompt_type=PromptType.FAST_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
-
+            deep_chain = prompt | lm_with_tools
             # print("info_full_name:"+info_full_name)
             # 替换工具占位符
-            replacer = PlaceholderReplacer()
-            final_prompt = replacer.replace_tools_with_details(info_full_name, self.tools)
-            deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
-            deep_chain = deep_prompt_template | llm | output_parser
-            async for chunk in deep_chain.astream({"input": query}):
-                # final_output += chunk
-                print(chunk,end="|",flush=True)
-                yield chunk
-            # return deep_chain
+            # replacer = PlaceholderReplacer()
+            # final_prompt = replacer.replace_tools_with_details(info_full_name, self.tools)
+            # deep_prompt_template = PromptTemplate(template=final_prompt, input_variables=["input"])
+            # deep_chain = deep_prompt_template | llm | output_parser
+            result = ""
+            function_calls = []
+            async for chunk in deep_chain.astream({"message": messages}):
+                result += chunk.content
 
+                yield chunk
+            print(query)
+            print(result)
+
+            # return deep_chain
+    @tool
+    def emotion(key: str, ) :
+        """用于情感陪伴"""
+        print("key:", key)
+        return key
     async def use_tool_by_name(self,guid:str,user_name,role_name,role_status:str, action_name: str, action_input: str, db_context: DBContext) -> Any:
         """
         根据工具名称调用对应工具的方法，并传入action_input。
@@ -371,6 +588,20 @@ class CharacterAgent(AbstractAgent):
             opinion_memory = OpinionMemory(
                 connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
             system_prompt = self.character_info.format(
+                role_state=role_status,
+                user=user,
+                char=char,
+                memory_of_user=db_context.entity_memory.get_entity(guid),
+                environment="",
+                recent_event=db_context.message_summary.buffer_summaries(guid, 20),
+                opinion=opinion_memory.buffer(guid, 10),
+            )
+            return system_prompt
+        if prompt_type == PromptType.DEEP_CHAT:
+            # Setup chains
+            opinion_memory = OpinionMemory(
+                connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
+            system_prompt = self.tuji_info.format(
                 role_state=role_status,
                 user=user,
                 char=char,
