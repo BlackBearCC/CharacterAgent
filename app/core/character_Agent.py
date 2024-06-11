@@ -388,7 +388,7 @@ class CharacterAgent(AbstractAgent):
                         if function_name == "普通回复" and not None:
                             chunk = function_data.get('arguments')
                             result += chunk
-                            data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
+                            data_to_send = json.dumps({"action": None, "text": chunk}, ensure_ascii=False)
                             yield data_to_send
                         else:
                             result += function_data.get('arguments', '')
