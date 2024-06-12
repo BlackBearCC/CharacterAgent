@@ -18,7 +18,7 @@ class Entity(Base):
     __tablename__ = 'entity_store'
     entity_id = Column(Integer, primary_key=True)
     entity = Column(String(255))
-    summary = Column(String(255))
+    summary = Column(Text)
     created_at = Column(DateTime, server_default="CURRENT_TIMESTAMP")
     updated_at = Column(DateTime, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP'))
 

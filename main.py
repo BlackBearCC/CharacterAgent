@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from typing import AsyncContextManager
+from typing import AsyncContextManager, AsyncGenerator
 
 import httpx
 import pytz
@@ -209,6 +209,8 @@ tuji_agent = CharacterAgent(base_info=base_info,
                             tools=tools
                             )
 
+
+
 def get_client():
     base_url = os.getenv("TTS_API_URL")
     client = Client(base_url)
@@ -314,15 +316,44 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"系统错误: {str(e)}")
 
 
-async def chat_generator(uid, user_name, role_name, input_text, role_status: str ,db_context,llm: BaseChatModel):
-    # try:
+async def chat_generator(uid: str, user_name: str, role_name: str, input_text: str, role_status: str,
+                        db_context: DBContext, llm: BaseChatModel) -> AsyncGenerator[str, None]:
+    retries = 3
+    delay = 1  # 初始重试延迟时间（秒）
+    max_delay = 6  # 最大重试延迟时间（秒）
+    errors = []
 
-        async for response_chunk in  tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
-                                                        input_text=input_text, role_status=role_status,
-                                                        db_context=db_context,llm=llm):
-            print(response_chunk, end="", flush=True)
-
-            yield response_chunk
+    while retries > 0:
+        try:
+            async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
+                                                         input_text=input_text, role_status=role_status,
+                                                         db_context=db_context, llm=llm):
+                print(response_chunk, end="", flush=True)
+                yield response_chunk
+            # 成功获取数据，退出循环
+            break
+        except (ValueError, ConnectionError) as e:
+            errors.append((type(e), e))
+            retries -= 1
+            logging.error(f"聊天响应生成时遇到错误: {e}, 尝试重试({retries}/{3})")
+            # async for r in  tuji_agent.balderdash(user_name, role_name, role_status, uid, e , input_text,db_context):
+            #     yield r
+            await asyncio.sleep(delay)  # 等待后重试
+            delay = min(delay * 2, max_delay)  # 指数退避
+        except Exception as e:
+            errors.append((type(e), e))
+            retries -= 1
+            logging.error(f"聊天事件生成器中遇到未知错误: {e}, 尝试重试({retries}/{3})")
+            # async for r in tuji_agent.balderdash(user_name, role_name, role_status, uid, e, input_text, db_context):
+            #     yield r
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, max_delay)
+        finally:
+            if retries == 0:
+                logging.error(f"所有重试均失败，不再尝试。uid: {uid}, user_name: {user_name}, role_name: {role_name}")
+                async for r in tuji_agent.balderdash(user_name, role_name, role_status, uid, str(errors), input_text, db_context):
+                    data_to_send = json.dumps({"action": "胡言乱语", "text": r}, ensure_ascii=False)
+                    yield data_to_send
 
 
     # except ValueError as ve:
@@ -374,10 +405,37 @@ def validate_date(date_string, format="%Y-%m-%d %H:%M:%S"):
         return datetime.strptime(date_string, format)
     except ValueError:
         raise ValueError("Incorrect date format, should be YYYY-MM-DD HH:MM:SS")
-async def write_diary_event_generator(uid, user_name, role_name, date_range,llm:BaseLLM, db_context: DBContext):
+
+
+async def write_diary_event_generator(uid: str, user_name: str, role_name: str, date_range,
+                                      llm: BaseLLM, db_context: DBContext) -> AsyncGenerator[str, None]:
+    retries = 3
+    delay = 10  # 初始重试延迟时间（秒）
+    max_delay = 60  # 最大重试延迟时间（秒）
+
     date_start, date_end = date_range
-    async for response_chunk in tuji_agent.write_diary(guid=uid, user_name=user_name, role_name=role_name, date_start=date_start, date_end=date_end,llm=llm,db_context=db_context):
-        yield response_chunk
+
+    while retries > 0:
+        try:
+            async for response_chunk in tuji_agent.write_diary(guid=uid, user_name=user_name, role_name=role_name,
+                                                               date_start=date_start, date_end=date_end, llm=llm,
+                                                               db_context=db_context):
+                yield response_chunk
+            # 成功获取数据，跳出循环
+            break
+        except Exception as e:
+            retries -= 1
+            logging.error(
+                f"写日记操作失败，正在进行第{4 - retries}/{3}次重试, uid: {uid}, user_name: {user_name}, role_name: {role_name}, 日期范围: {date_start} 至 {date_end}. 错误详情: {e}")
+            if retries > 0:
+                # 计算下一次重试的延迟时间，使用指数退避策略
+                delay = min(delay * 2, max_delay)
+                await asyncio.sleep(delay)  # 等待指定时间后重试
+            else:
+                logging.error(
+                    f"所有重试均失败，不再尝试。uid: {uid}, user_name: {user_name}, role_name: {role_name}, 日期范围: {date_start} 至 {date_end}")
+                raise
+    # 重试失败后重新抛出异常，以通知上层调用者
 
 @app.post("/game/write_diary")
 async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db_context),llm: BaseLLM = Depends(get_qwen_plus)):
@@ -419,28 +477,37 @@ async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db
 
 
 
-async def event_generator(uid:str,user_name,role_name,llm:BaseChatModel, event:str,db_context: DBContext):
-    async for response_chunk in tuji_agent.event_response(guid=uid,user_name=user_name,role_name=role_name,llm=llm,event=event,db_context=db_context):
-        yield response_chunk
+async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseChatModel, event: str, db_context: DBContext) -> AsyncGenerator:
+    retries = 3
+    delay = 1  # 初始延迟为1秒
+    max_delay = 10  # 最大延迟为10秒
+    errors = []
+    while retries > 0:
+        try:
+            async for response_chunk in tuji_agent.event_response(guid=uid, user_name=user_name, role_name=role_name,
+                                                                  llm=llm, event=event, db_context=db_context):
+                yield response_chunk
+            break
+        except Exception as e:
+            retries -= 1
+            logging.error(f"操作失败，uid: {uid}, user_name: {user_name}, role_name: {role_name}, 进行第{4 - retries}/{3}次重试: {e}")
+            if retries > 0:
+                # 确保延迟不超过最大值
+                delay = min(delay * 2, max_delay)
+                await asyncio.sleep(delay)  # 引入延迟
+            else:
+                logging.error(f"所有重试均失败，uid: {uid}, user_name: {user_name}, role_name: {role_name}")
+
+                async for r in tuji_agent.balderdash(user_name, role_name, base_info, uid, str(errors), "",
+                                                     db_context):
+                    yield r
+
 
 @app.post("/game/event_response")
 async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_chat_qwen_turbo)):
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    # messages = [
-    #     AIMessage(content="Hi."),
-    #     SystemMessage(content="Your role is a poet."),
-    #     HumanMessage(content="Write a short poem about AI in four lines."),
-    # ]
-    # async_chat = ChatZhipuAI(
-    # model="glm-4",
-    # temperature=0.5,
-    # )
-    #
-    # response = await async_chat.agenerate([messages])
-    # print(response)
-
     uid = user.guid
     user_name = user.username
     role_name = user.role_name
@@ -468,12 +535,10 @@ async def event_response(request: EventRequest,db_context: DBContext = Depends(g
     except Exception as e:
         logging.error(f"游戏事件请求解析失败: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Game event request parse failed")
-    finally:
-        await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,llm=llm,
-                                 db_context=db_context)
+
+
 
     # llm = Ollama(model="qwen:32b", temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
-
 
 
 

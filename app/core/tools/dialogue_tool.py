@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -50,7 +51,7 @@ class DialogueTool(BaseTool):
 def _init_chain(strategy_name,llm=None):
     """初始化对话策略"""
     if llm is None:
-        llm = Tongyi(model_name="qwen-max", top_p=0.6, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+        llm = Tongyi(model_name="qwen-plus", top_p=0.6, dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
     replacer = PlaceholderReplacer()
     # 加载JSON配置文件
@@ -202,7 +203,7 @@ class InformationTool(DialogueTool):
                     # information_with_data = INFORMATION_STRATEGY.replace("{information}", ", ".join(data_pairs))
 
                     # print("InformationStrategy:", information_with_data)
-                    llm = Tongyi(model_name="qwen-max", top_p=0.4,
+                    llm = Tongyi(model_name="qwen-plus", top_p=0.4,
                                  dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
                     chain = _init_chain( INFORMATION_STRATEGY,llm)
 
@@ -258,7 +259,8 @@ class OpinionTool(DialogueTool):
                                                "history": history}):
             final_result += chunk
             yield chunk
-        await self.opinion_task(uid=uid,action_input=action_input,user_name=user_name,role_name=role_name,last_message=final_result,db_context=db_context)  # 执行 opinion_task 任务
+        asyncio.create_task(self.opinion_task(uid=uid,action_input=action_input,user_name=user_name,role_name=role_name,last_message=final_result,db_context=db_context))
+        # await self.opinion_task(uid=uid,action_input=action_input,user_name=user_name,role_name=role_name,last_message=final_result,db_context=db_context)  # 执行 opinion_task 任务
 
     async def opinion_task(self,uid:str,action_input: str,user_name,role_name,last_message,db_context: DBContext):
         logging.info("Agent 执行 opinion_task 任务")
@@ -267,7 +269,7 @@ class OpinionTool(DialogueTool):
         )
 
 
-        llm = Tongyi(model_name="qwen-max", top_p=0.4,
+        llm = Tongyi(model_name="qwen-plus", top_p=0.4,
                      dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         prompt_template = PromptTemplate(template=OPINION_STRATEGY_TASK, input_variables=["input","last_message","history"])
         output_parser = StrOutputParser()

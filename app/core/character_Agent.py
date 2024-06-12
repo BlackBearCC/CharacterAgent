@@ -1,9 +1,10 @@
+import asyncio
 import inspect
 import json
 from enum import Enum
 from typing import Any, Dict, List, AsyncGenerator
 
-
+from langchain_community.llms.tongyi import Tongyi
 from langchain_core.language_models import BaseLLM, BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -21,7 +22,7 @@ from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
 from ai.prompts.prompt_emum import PromptType
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
-from ai.prompts.task import EVENT_SUMMARY_TEMPLATE
+from ai.prompts.task import EVENT_SUMMARY_TEMPLATE, BALDERDASH_TEMPLATE
 from app.core.abstract_Agent import AbstractAgent
 from app.service.services import DBContext
 
@@ -58,7 +59,7 @@ class CharacterAgent(AbstractAgent):
 
 
         # self.similarity_threshold = 0.365
-        self.similarity_threshold = 888
+        self.similarity_threshold = 666
         self.base_info = base_info
 
 
@@ -132,7 +133,7 @@ class CharacterAgent(AbstractAgent):
                             },
                             "reply_instruction": {
                                 "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
                             }
                         },
 
@@ -159,7 +160,7 @@ class CharacterAgent(AbstractAgent):
                             },
                             "reply_instruction": {
                                 "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
                             }
                         }
                     },
@@ -184,7 +185,7 @@ class CharacterAgent(AbstractAgent):
                             },
                             "reply_instruction": {
                                 "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
                             }
                         }
                     },
@@ -206,7 +207,7 @@ class CharacterAgent(AbstractAgent):
                         },
                         "reply_instruction": {
                             "type": "string",
-                            "description": "结合人设和上下文，指派查询到结果后的关键内容（不超过10个字，不可以查询结果！）",
+                            "description": "结合人设和上下文，输出你的指导回复的关键词组（不超过10个字，不可以查询结果！）",
                         }
                     },
                     "required": ["storage_type","reply_instruction"],
@@ -238,7 +239,7 @@ class CharacterAgent(AbstractAgent):
                             },
                             "reply_instruction": {
                                 "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
                             }
                         }
                     },
@@ -263,7 +264,7 @@ class CharacterAgent(AbstractAgent):
                             },
                             "reply_instruction": {
                                 "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
                             }
                         },
                     },
@@ -292,35 +293,18 @@ class CharacterAgent(AbstractAgent):
                             },
                             "reply_instruction": {
                                 "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键内容（不超过10个字）",
+                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
                             }
                         },
 
                     },
                     "required": ["history_question", "key_role_state", "expression_attitude", "reply_instruction"],
                 }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "普通回复",
-                    "description": "用于没有合适工具时，直接回复",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "reply_content": {
-                                "type": "string",
-                                "description": "结合人设和上下文信息，遵循你可以调用的tool的description约束，生成你的回复",
-                            }
-                        },
-                    },
-                    "required": ["reply_content"],
-                }
             }
         ]
 
         if avg_score > self.similarity_threshold:
-            print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
+            print("Agent : 相似度分数高于阈值，使用FastChain 进行回答")
             system_prompt = self._generate_system_prompt(prompt_type=PromptType.FAST_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
             # print("system_prompt:"+system_prompt)
             system_prompt=system_prompt.replace("__classic_scenes__",combined_content)
@@ -335,22 +319,23 @@ class CharacterAgent(AbstractAgent):
                     MessagesPlaceholder(variable_name="message"),
                 ]
             )
+
             fast_chain = prompt | llm
             results = ""
             response_metadata = None
             async for r in fast_chain.astream({"message": messages}):
                 results += r.content
                 response_metadata = r.response_metadata
-                data_to_send = json.dumps({"action": None, "text": r.content}, ensure_ascii=False)
+                data_to_send = json.dumps({"action": "快速回复", "text": r.content}, ensure_ascii=False)
                 yield data_to_send
 
             logging.info(f"Agent Fast Chain Output: {results}")
             ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
-                                 generate_from="Chat-FastChain",call_step=json.dumps(response_metadata))
+                                 generate_from="快速回复",call_step=json.dumps(response_metadata))
             db_context.message_memory.add_message(ai_message)
 
         else:
-            print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
+            print("Agent : 相似度分数低于阈值，使用DeepChain 进行回答")
             llm_kwargs = {"tools": tools, "result_format": "message"}
             system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
             messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
@@ -372,75 +357,169 @@ class CharacterAgent(AbstractAgent):
             )
             result =""
             function_name = None
-
+            json_buff = ""
             deep_chain = prompt | lm_with_tools
-
+            is_json_started = False  # 标记是否已遇到开头的'{'
             async for chunk in deep_chain.astream({"message": messages}):
-                if chunk.additional_kwargs is None:
-                    yield chunk
-                else:
-                    tool_calls = chunk.additional_kwargs.get('tool_calls', [])
-
+                # print(chunk)
+                tool_calls = chunk.additional_kwargs.get('tool_calls')
+                # print("tool_calls:" + str(tool_calls))
+                if tool_calls:
+                    # tool_calls = chunk.additional_kwargs.get('tool_calls', [])
                     for call in tool_calls:
                         function_data = call.get('function', {})
+                        # print("function_data:" + str(function_data))
                         if function_data.get('name'):
                             function_name = function_data.get('name')
-                        if function_name == "普通回复" and not None:
-                            chunk = function_data.get('arguments')
-                            result += chunk
-                            data_to_send = json.dumps({"action": None, "text": chunk}, ensure_ascii=False)
+                            # print("function_name:" + function_name)
+                        result += function_data.get('arguments', '')
+                        data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
+                        yield data_to_send
+                elif chunk.content != "":
+                    # 检查当前chunk是否以'{'开始，若为真则标记json已经开始
+                    if chunk.content.startswith('{'):
+                        is_json_started = True
+
+                    else:
+                        if is_json_started:
+                            result += chunk.content
+                            data_to_send = json.dumps({"action": "深度回复", "text": None},
+                                                      ensure_ascii=False)
+                            logging.info(f"Agent Deep Chain 深度回复输出了非常规内容: {result}")
                             yield data_to_send
                         else:
-                            result += function_data.get('arguments', '')
-                            data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
-                            print()
+                            function_name = "深度回复"
+                            result += chunk.content
+                            data_to_send = json.dumps({"action": function_name, "text": chunk.content},
+                                                      ensure_ascii=False)
                             yield data_to_send
+                            # print("chunk.content:" + chunk.content)
+                        # function_name = "深度回复"
+                        # result += chunk.content
+                        # data_to_send = json.dumps({"action": function_name, "text": chunk.content},
+                        #                           ensure_ascii=False)
+                        # yield data_to_send
 
-            if  function_name != "普通回复" :
-                try:
-                    arguments_json_array = json.dumps(result, ensure_ascii=False)
+            # 异步生成结束后，检查result是否为有效的JSON
+            try:
+                json_object = json.loads(result)
+                tool_result = ""
+                async for chunk in await self.use_tool_by_name(guid=guid,
+                                                                           user_name=user_name,
+                                                                           role_name=role_name,
+                                                                           role_status=role_status,
+                                                                           db_context=db_context,
+                                                                           action_name=function_name,
+                                                                           action_input=json_object
+                                                                           ):
+                            data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
+                            tool_result += chunk
+                            yield data_to_send
+                ai_message = Message(user_guid=guid, type="ai", role=role_name, message=tool_result,
+                                     generate_from=function_name, call_step=json.dumps(json_object,ensure_ascii=False))
+                db_context.message_memory.add_message(ai_message)
+                print("Result is valid JSON.")
+            except json.JSONDecodeError:
+                ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
+                                     generate_from=function_name, call_step="Deep/Error")
+                db_context.message_memory.add_message(ai_message)
+                print("Result is NOT valid JSON.")
 
-                    print("\nArguments解析为JSON成功，内容是:", arguments_json_array)
-                    result = ""
-                    async for chunk in await self.use_tool_by_name(guid=guid,
-                                                                   user_name=user_name,
-                                                                   role_name=role_name,
-                                                                   role_status=role_status,
-                                                                   db_context=db_context,
-                                                                   action_name=function_name,
-                                                                   action_input=arguments_json_array
-                                                                   ):
-                        data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
-                        result += chunk
-                        yield data_to_send
+            # ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
+            #                      generate_from=function_name, call_step=)
+            # db_context.message_memory.add_message(ai_message)
 
-                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
-                                         generate_from=function_name, call_step=json.dumps(arguments_json_array))
-                    db_context.message_memory.add_message(ai_message)
 
-                except json.JSONDecodeError:
-                    data_to_send = json.dumps(
-                        {"action": function_name, "text": "抱歉呢~我收到的信号碎片好像出问题啦...等一等哦"})
-                    yield data_to_send
-                    ai_message = Message(user_guid=guid, type="ai", role=role_name,
-                                         message="抱歉呢~我收到的信号碎片好像出问题啦...等一等哦",
-                                         generate_from=function_name, call_step="Error")
-                    db_context.message_memory.add_message(ai_message)
-                    print("Arguments不是有效的JSON格式，请检查后重试。")
-
-                    # logging.info(f"Agent Deep Chain Output: {strategy_output}")
-            else:
-                try:
-                    result = json.loads(result)
-                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result["reply_content"],
-                                         generate_from=function_name,
-                                         )
-                    db_context.message_memory.add_message(ai_message)
-                except json.JSONDecodeError:
-                    logging.error("普通回复内容不是有效的JSON格式，已存入数据库")
-                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
-                                         generate_from=function_name, call_step="Error")
-                    db_context.message_memory.add_message(ai_message)
+            #     if chunk.additional_kwargs is None:
+            #         data_to_send = json.dumps({"action": None, "text": "哎呀呀~信号解析出错啦@￥##%！&"}, ensure_ascii=False)
+            #         yield data_to_send
+            #     if chunk.content != None and chunk.content.strip() != "":
+            #         print("chunk.content:" + chunk.content)
+            #         function_name = "普通回复"
+            #         result += chunk.content
+            #         data_to_send = json.dumps({"action": None, "text": chunk.content}, ensure_ascii=False)
+            #         yield data_to_send
+            #
+            #     else:
+            #         tool_calls = chunk.additional_kwargs.get('tool_calls', [])
+            #         print("tool_calls:" + str(chunk))
+            #
+            #         for call in tool_calls:
+            #             function_data = call.get('function', {})
+            #             # print("function_data:" + str(function_data))
+            #             if function_data.get('name'):
+            #                 function_name = function_data.get('name')
+            #                 # print("function_name:" + function_name)
+            #             if function_name == "普通回复" :
+            #                 # print("function_data:" + str(function_data))
+            #
+            #                 chunk = function_data.get('arguments')
+            #                 result += chunk
+            #                 data_to_send = json.dumps({"action": None, "text": chunk}, ensure_ascii=False)
+            #                 yield data_to_send
+            #             else:
+            #                 result += function_data.get('arguments', '')
+            #                 data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
+            #                 yield data_to_send
+            #
+            # if function_name is not None and function_name != "普通回复":
+            #     try:
+            #         arguments_json_array = json.dumps(result, ensure_ascii=False)
+            #
+            #         print("\nArguments解析为JSON成功，内容是:", arguments_json_array)
+            #         result = ""
+            #         try:
+            #             async for chunk in await self.use_tool_by_name(guid=guid,
+            #                                                            user_name=user_name,
+            #                                                            role_name=role_name,
+            #                                                            role_status=role_status,
+            #                                                            db_context=db_context,
+            #                                                            action_name=function_name,
+            #                                                            action_input=arguments_json_array
+            #                                                            ):
+            #                 data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
+            #                 result += chunk
+            #                 yield data_to_send
+            #
+            #             ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
+            #                                  generate_from=function_name, call_step=json.dumps(arguments_json_array))
+            #             db_context.message_memory.add_message(ai_message)
+            #         except:
+            #             data_to_send = json.dumps(
+            #                 {"action": function_name, "text": "抱歉呢~我好像被玩坏了，请稍后再试哦"})
+            #             yield data_to_send
+            #             ai_message = Message(user_guid=guid, type="ai", role=role_name,
+            #                                  message="抱歉呢~我好像被玩坏了，请稍后再试哦",
+            #                                  generate_from=function_name, call_step="Error")
+            #             db_context.message_memory.add_message(ai_message)
+            #             print("Arguments不是有效的JSON格式，请检查后重试。")
+            #
+            #
+            #     except json.JSONDecodeError:
+            #         data_to_send = json.dumps(
+            #             {"action": function_name, "text": "抱歉呢~我收到的信号碎片好像出问题啦...等一等哦"})
+            #         yield data_to_send
+            #         ai_message = Message(user_guid=guid, type="ai", role=role_name,
+            #                              message="抱歉呢~我收到的信号碎片好像出问题啦...等一等哦",
+            #                              generate_from=function_name, call_step="Error")
+            #         db_context.message_memory.add_message(ai_message)
+            #         print("Arguments不是有效的JSON格式，请检查后重试。")
+            #
+            #         # logging.info(f"Agent Deep Chain Output: {strategy_output}")
+            # else:
+            #     # print("普通回复")
+            #     # print("result:" + result)
+            #     try:
+            #         result = json.loads(result)
+            #         ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result["reply_content"],
+            #                              generate_from=function_name,
+            #                              )
+            #         db_context.message_memory.add_message(ai_message)
+            #     except json.JSONDecodeError:
+            #         logging.error("普通回复内容不是有效的JSON格式，已存入数据库")
+            #         ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
+            #                              generate_from=function_name, call_step="Deep/Error")
+            #         db_context.message_memory.add_message(ai_message)
 
             # return deep_chain
     @tool
@@ -451,7 +530,6 @@ class CharacterAgent(AbstractAgent):
     async def use_tool_by_name(self,guid:str,user_name,role_name,role_status:str, action_name: str, action_input: str, db_context: DBContext) -> Any:
         """
         根据工具名称调用对应工具的方法，并传入action_input。
-
         :param action_name: 要调用的工具的名称。
         :param action_input: 传给工具方法的输入字符串。
         :return: 工具方法执行后的返回值。
@@ -490,8 +568,12 @@ class CharacterAgent(AbstractAgent):
             # 如果遍历所有工具后仍未找到匹配的工具，记录警告信息
             logging.warning(f"未找到名为 '{action_name}' 的策略。")
 
+
+
+
         # 如果没有找到匹配的工具或方法，则返回None
         return None
+
 
     async def route_post_deep_chain(self, guid:str,user_name,role_name,input,role_status:str,db_context:DBContext):
         """
@@ -518,6 +600,31 @@ class CharacterAgent(AbstractAgent):
 
         logging.info("Agent Use Chain: %s", action_name)
         return await self.use_tool_by_name(guid=guid,user_name=user_name,role_name=role_name,action_name=action_name, action_input=action_input,role_status=role_status,db_context=db_context)
+    async def memory_entity(self,guid,user_name,role_name,message_threshold,db_context:DBContext):
+        message_content, message_ids = await db_context.message_memory.check_and_buffer_messages(guid, user_name,
+                                                                                                 role_name,
+                                                                                                 message_threshold)
+        if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
+            logging.info("开始更新实体记忆")
+            llm = Tongyi(model_name="qwen-turbo", temperature=0.7,dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+            entity = db_context.entity_memory.get_entity(guid)
+            output_parser = StrOutputParser()
+            if entity is None:
+                entity = Entity(entity=user_name, summary="", user_guid=guid)
+            info_with_entity = ENTITY_SUMMARIZATION_PROMPT.replace("{entity}", entity.entity)
+            entity_with_history = info_with_entity.replace("{history}",message_content)
+            entity_with_summary = entity_with_history.replace("{summary}", entity.summary)
+            entity_prompt_template = PromptTemplate(template=entity_with_summary, input_variables=["input"])
+            reflexion_chain = entity_prompt_template | llm | output_parser
+            entity_output = ""
+            async for chunk in reflexion_chain.astream({"input": ":"}):
+                entity_output += chunk
+                print(f"{chunk}", end="|", flush=True)
+            entity.summary = entity_output
+            db_context.entity_memory.add_entity(entity)
+            logging.info(f"Agent 实体更新记忆: {entity}")
+        else:
+            logging.info("Agent 实体更新记忆: 跳过")
 
     async def response(self, guid:str ,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm:BaseChatModel) -> AsyncGenerator[str, None]:
 
@@ -529,6 +636,10 @@ class CharacterAgent(AbstractAgent):
         db_context.message_memory.add_message(human_message)
         async for chunk in self.rute_retriever(guid=guid,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm):
             yield chunk
+        asyncio.create_task(self.memory_summary(guid, user_name, role_name, 10, db_context))
+        asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))
+
+
         # step_message = ""
         # final_output = ""  # 用于存储最终输出字符串
         # self.user_input = input_text  # 存储用户输入
@@ -672,8 +783,8 @@ class CharacterAgent(AbstractAgent):
             return system_prompt
 
 
-
     async def event_response(self,user_name,role_name,llm:BaseChatModel,guid:str,event: str,db_context:DBContext) -> AsyncGenerator[str, None]:
+
         system_message = Message(user_guid=guid, type="event", role="系统事件", message=event,
                                  generate_from="game")
         db_context.message_memory.add_message(system_message)
@@ -702,6 +813,8 @@ class CharacterAgent(AbstractAgent):
         db_context.message_memory.add_message(ai_message)
         logging.info(f"Agent System Event: {event}")
         logging.info(f"Agent System Event Response: {results}")
+        asyncio.create_task(self.memory_summary(guid, user_name, role_name, 10, db_context))
+        asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))
 
 
 
@@ -732,17 +845,37 @@ class CharacterAgent(AbstractAgent):
         # logging.info(f"Agent System Event Response: {results}")
 
 
+    async def balderdash(self, user_name,role_name,role_info,guid:str,exception,user_input,db_context:DBContext,llm=None):
+        logging.info(f"Agent Balderdash: 触发异常，胡言乱语中...")
+        if llm is None:
+            llm = Tongyi(model_name="qwen-turbo", temperature=0.7,
+                         dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+            prompt_template = PromptTemplate(template=BALDERDASH_TEMPLATE, input_variables=["role_info","input","exception"])
+            output_parser = StrOutputParser()
+            chain = prompt_template |llm | output_parser
+            results="胡言乱语中..."
+            action_name = "胡言乱语"
+            async for chunk in chain.astream({"role_info":role_info,"input":user_input,"exception":exception}):
+                results+=chunk
+                yield chunk
+
+
+            ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
+                                 generate_from=action_name)
+            db_context.message_memory.add_message(ai_message)
 
 
 
 
-    async def summary(self,user_name,role_name,guid:str,message_threshold:int,llm,db_context:DBContext):
+    async def memory_summary(self,user_name,role_name,guid:str,message_threshold:int,db_context:DBContext,llm=None):
         print(f"Agent Summary: 判断是否需要生成摘要...")
         message_content, message_ids =await db_context.message_memory.check_and_buffer_messages(guid, user_name, role_name,
                                                                                            message_threshold)
         if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
             print("生成摘要...")
-
+            if llm is None:
+                llm = Tongyi(model_name="qwen-turbo", temperature=0.7,
+                             dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
             prompt_template = PromptTemplate(template=EVENT_SUMMARY_TEMPLATE, input_variables=["history"])
             output_parser = StrOutputParser()
 
