@@ -59,7 +59,7 @@ class CharacterAgent(AbstractAgent):
 
 
         # self.similarity_threshold = 0.365
-        self.similarity_threshold = 666
+        self.similarity_threshold = 888
         self.base_info = base_info
 
 
@@ -361,7 +361,7 @@ class CharacterAgent(AbstractAgent):
             deep_chain = prompt | lm_with_tools
             is_json_started = False  # 标记是否已遇到开头的'{'
             async for chunk in deep_chain.astream({"message": messages}):
-                # print(chunk)
+                print(chunk)
                 tool_calls = chunk.additional_kwargs.get('tool_calls')
                 # print("tool_calls:" + str(tool_calls))
                 if tool_calls:
@@ -376,28 +376,25 @@ class CharacterAgent(AbstractAgent):
                         data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
                         yield data_to_send
                 elif chunk.content != "":
-                    # 检查当前chunk是否以'{'开始，若为真则标记json已经开始
-                    if '{' in chunk.content:
-                        is_json_started = True
-                        logging.info(f"Agent Deep Chain 深度回复输出了json内容: {chunk.content}")
-                    else:
-                        if is_json_started:
-                            result += chunk.content
-                            data_to_send = json.dumps({"action": "深度回复", "text": None},
-                                                      ensure_ascii=False)
-                            yield data_to_send
-                        else:
-                            function_name = "深度回复"
-                            result += chunk.content
-                            data_to_send = json.dumps({"action": function_name, "text": chunk.content},
-                                                      ensure_ascii=False)
-                            yield data_to_send
-                            # print("chunk.content:" + chunk.content)
-                        # function_name = "深度回复"
-                        # result += chunk.content
-                        # data_to_send = json.dumps({"action": function_name, "text": chunk.content},
-                        #                           ensure_ascii=False)
-                        # yield data_to_send
+                    logging.info(f"Agent Deep Chain 生成策略失败: {chunk.content}")
+
+                    # # 检查当前chunk是否以'{'开始，若为真则标记json已经开始
+                    # if '{' in chunk.content:
+                    #     is_json_started = True
+                    #     logging.info(f"Agent Deep Chain 深度回复输出了json内容: {chunk.content}")
+                    # else:
+                    #     if is_json_started:
+                    #         result += chunk.content
+                    #         data_to_send = json.dumps({"action": "深度回复", "text": None},
+                    #                                   ensure_ascii=False)
+                    #         yield data_to_send
+                    #     else:
+                    #         function_name = "深度回复"
+                    #         result += chunk.content
+                    #         data_to_send = json.dumps({"action": function_name, "text": chunk.content},
+                    #                                   ensure_ascii=False)
+                    #         yield data_to_send
+
 
             # 异步生成结束后，检查result是否为有效的JSON
             try:
