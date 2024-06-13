@@ -29,3 +29,5 @@ gradio_client
 httpx
 httpx-sse
 PyJWT
+
+locust

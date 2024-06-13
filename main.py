@@ -344,8 +344,7 @@ async def chat_generator(uid: str, user_name: str, role_name: str, input_text: s
             errors.append((type(e), e))
             retries -= 1
             logging.error(f"聊天事件生成器中遇到未知错误: {e}, 尝试重试({retries}/{3})")
-            # async for r in tuji_agent.balderdash(user_name, role_name, role_status, uid, e, input_text, db_context):
-            #     yield r
+
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_delay)
         finally:

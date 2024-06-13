@@ -196,7 +196,7 @@ class CharacterAgent(AbstractAgent):
                 "type": "function",
                 "function": {
                     "name": "信息查找",
-                    "description": "查找和回答有关冰箱或储物柜内物品的具体信息，如数量、内容、位置等。",
+                    "description": "只能用于查找和回答有关冰箱或储物柜内物品的具体信息，如数量、内容、位置等。",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -207,7 +207,7 @@ class CharacterAgent(AbstractAgent):
                         },
                         "reply_instruction": {
                             "type": "string",
-                            "description": "结合人设和上下文，输出你的指导回复的关键词组（不超过10个字，不可以查询结果！）",
+                            "description": "结合人设和上下文，输出你的指导回复的关键词组（不超过10个字，不可以编造查询结果！）",
                         }
                     },
                     "required": ["storage_type","reply_instruction"],
@@ -377,15 +377,14 @@ class CharacterAgent(AbstractAgent):
                         yield data_to_send
                 elif chunk.content != "":
                     # 检查当前chunk是否以'{'开始，若为真则标记json已经开始
-                    if chunk.content.startswith('{'):
+                    if '{' in chunk.content:
                         is_json_started = True
-
+                        logging.info(f"Agent Deep Chain 深度回复输出了json内容: {chunk.content}")
                     else:
                         if is_json_started:
                             result += chunk.content
                             data_to_send = json.dumps({"action": "深度回复", "text": None},
                                                       ensure_ascii=False)
-                            logging.info(f"Agent Deep Chain 深度回复输出了非常规内容: {result}")
                             yield data_to_send
                         else:
                             function_name = "深度回复"
@@ -402,23 +401,28 @@ class CharacterAgent(AbstractAgent):
 
             # 异步生成结束后，检查result是否为有效的JSON
             try:
-                json_object = json.loads(result)
-                tool_result = ""
-                async for chunk in await self.use_tool_by_name(guid=guid,
-                                                                           user_name=user_name,
-                                                                           role_name=role_name,
-                                                                           role_status=role_status,
-                                                                           db_context=db_context,
-                                                                           action_name=function_name,
-                                                                           action_input=json_object
-                                                                           ):
-                            data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
-                            tool_result += chunk
-                            yield data_to_send
-                ai_message = Message(user_guid=guid, type="ai", role=role_name, message=tool_result,
-                                     generate_from=function_name, call_step=json.dumps(json_object,ensure_ascii=False))
-                db_context.message_memory.add_message(ai_message)
-                print("Result is valid JSON.")
+                if function_name != "深度回复":
+                    json_object = json.loads(result)
+                    tool_result = ""
+                    async for chunk in await self.use_tool_by_name(guid=guid,
+                                                                   user_name=user_name,
+                                                                   role_name=role_name,
+                                                                   role_status=role_status,
+                                                                   db_context=db_context,
+                                                                   action_name=function_name,
+                                                                   action_input=json_object
+                                                                   ):
+                        data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
+                        tool_result += chunk
+                        yield data_to_send
+                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=tool_result,
+                                         generate_from=function_name,
+                                         call_step=json.dumps(json_object, ensure_ascii=False))
+                    db_context.message_memory.add_message(ai_message)
+                    print("Result is valid JSON.")
+                else:
+                    logging.info(f"Agent Deep Chain 深度回复输出了json: {result}")
+
             except json.JSONDecodeError:
                 ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
                                      generate_from=function_name, call_step="Deep/Error")
@@ -522,11 +526,7 @@ class CharacterAgent(AbstractAgent):
             #         db_context.message_memory.add_message(ai_message)
 
             # return deep_chain
-    @tool
-    def emotion(key: str, ) :
-        """用于情感陪伴"""
-        print("key:", key)
-        return key
+
     async def use_tool_by_name(self,guid:str,user_name,role_name,role_status:str, action_name: str, action_input: str, db_context: DBContext) -> Any:
         """
         根据工具名称调用对应工具的方法，并传入action_input。
