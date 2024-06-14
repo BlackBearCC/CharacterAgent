@@ -205,12 +205,12 @@ class CharacterAgent(AbstractAgent):
                 ]
             )
             result =""
-            function_name = None
+            function_name = ""
             json_buff = ""
             deep_chain = prompt | lm_with_tools
             is_use_fast_chain = False
             async for chunk in deep_chain.astream({"message": messages}):
-                # print(chunk)
+                print(chunk)
                 tool_calls = chunk.additional_kwargs.get('tool_calls')
                 chunk_content = chunk.content
                 # print("tool_calls:" + str(tool_calls))
@@ -220,7 +220,11 @@ class CharacterAgent(AbstractAgent):
                         function_data = call.get('function', {})
                         # print("function_data:" + str(function_data))
                         if function_data.get('name'):
-                            function_name = function_data.get('name')
+                            new_function_name = function_data.get('name')
+                            if len(new_function_name) <= 4:  # 检查新名称的长度是否小于等于4
+                                function_name += new_function_name  # 累加到现有的function_name
+                            else:
+                                function_name = new_function_name  # 直接替换现有的function_name
                             # print("function_name:" + function_name)
                         result += function_data.get('arguments', '')
                         data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
@@ -255,11 +259,12 @@ class CharacterAgent(AbstractAgent):
                     ai_message = Message(user_guid=guid, type="ai", role=role_name, message=tool_result,
                                              generate_from=function_name,
                                              call_step=json.dumps(json_object, ensure_ascii=False))
+                    last = [human_message, ai_message]
 
-                    db_context.message_memory.add_messages([human_message,ai_message])
+                    await self.remember(db_context=db_context,messages=last)
                     print("Result is valid JSON.")
-                except json.JSONDecodeError:
-                    logging.error("Result is not valid JSON.使用fastchain")
+                except Exception as e  :
+                    logging.error(f"Result is not valid JSON.{e}...使用fastchain")
                     async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
                                                       role_status=role_status,
                                                       user_name=user_name, role_name=role_name, guid=guid, query=query,
