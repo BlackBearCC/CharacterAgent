@@ -15,7 +15,7 @@ from langchain_core.messages import get_buffer_string
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSerializable
-
+from langchain_core.tools import tool
 
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.base_dialogue import BASE_STRATEGY_PROMPT
@@ -67,7 +67,10 @@ def _init_chain(strategy_name,llm=None):
     emotion_chain = emotion_template | llm | output_parser
     return emotion_chain
 
-
+@tool
+def multiply(first_int: int, second_int: int) -> int:
+        """Multiply two integers together."""
+        return first_int * second_int
 class EmotionCompanionTool(DialogueTool):
     """情感陪伴策略"""
     name = "情感陪伴"

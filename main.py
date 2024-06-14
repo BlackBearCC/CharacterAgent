@@ -323,36 +323,43 @@ async def chat_generator(uid: str, user_name: str, role_name: str, input_text: s
     max_delay = 6  # 最大重试延迟时间（秒）
     errors = []
 
-    while retries > 0:
-        try:
-            async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
+    # while retries > 0:
+    #     try:
+    results=""
+    async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
                                                          input_text=input_text, role_status=role_status,
                                                          db_context=db_context, llm=llm):
                 print(response_chunk, end="", flush=True)
+                results+=response_chunk
                 yield response_chunk
-            # 成功获取数据，退出循环
-            break
-        except (ValueError, ConnectionError) as e:
-            errors.append((type(e), e))
-            retries -= 1
-            logging.error(f"聊天响应生成时遇到错误: {e}, 尝试重试({retries}/{3})")
-            # async for r in  tuji_agent.balderdash(user_name, role_name, role_status, uid, e , input_text,db_context):
-            #     yield r
-            await asyncio.sleep(delay)  # 等待后重试
-            delay = min(delay * 2, max_delay)  # 指数退避
-        except Exception as e:
-            errors.append((type(e), e))
-            retries -= 1
-            logging.error(f"聊天事件生成器中遇到未知错误: {e}, 尝试重试({retries}/{3})")
 
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, max_delay)
-        finally:
-            if retries == 0:
-                logging.error(f"所有重试均失败，不再尝试。uid: {uid}, user_name: {user_name}, role_name: {role_name}")
-                async for r in tuji_agent.balderdash(user_name, role_name, role_status, uid, str(errors), input_text, db_context):
-                    data_to_send = json.dumps({"action": "胡言乱语", "text": r}, ensure_ascii=False)
-                    yield data_to_send
+    # human_message = Message(user_guid=uid, type="human", role=role_name, message=input_text)
+    # ai_message = Message(user_guid=uid, type="ai", role=role_name, message=results )
+    # messages = [human_message, ai_message]
+    # await tuji_agent.remember(messages=messages,db_context=db_context)
+            # 成功获取数据，退出循环
+            # break
+        # except (ValueError, ConnectionError) as e:
+        #     errors.append((type(e), e))
+        #     retries -= 1
+        #     logging.error(f"聊天响应生成时遇到错误: {e}, 尝试重试({retries}/{3})")
+        #     # async for r in  tuji_agent.balderdash(user_name, role_name, role_status, uid, e , input_text,db_context):
+        #     #     yield r
+        #     await asyncio.sleep(delay)  # 等待后重试
+        #     delay = min(delay * 2, max_delay)  # 指数退避
+        # except Exception as e:
+        #     errors.append((type(e), e))
+        #     retries -= 1
+        #     logging.error(f"聊天事件生成器中遇到未知错误: {e}, 尝试重试({retries}/{3})")
+        #
+        #     await asyncio.sleep(delay)
+        #     delay = min(delay * 2, max_delay)
+        # finally:
+        #     if retries == 0:
+        #         logging.error(f"所有重试均失败，不再尝试。uid: {uid}, user_name: {user_name}, role_name: {role_name}")
+        #         async for r in tuji_agent.balderdash(user_name, role_name, role_status, uid, str(errors), input_text, db_context):
+        #             data_to_send = json.dumps({"action": "胡言乱语", "text": r}, ensure_ascii=False)
+        #             yield data_to_send
 
 
     # except ValueError as ve:

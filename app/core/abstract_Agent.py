@@ -33,15 +33,15 @@ class AbstractAgent(ABC):
         """
         pass
 
-    @abstractmethod
-    def remember(self, key: str ):
-        """
-        保存一条信息，以供将来回忆。
-
-        参数:
-        key (str): 信息的键，用于回忆信息时使用。
-        """
-        pass
+    # @abstractmethod
+    # def remember(self, key: str ):
+    #     """
+    #     保存一条信息，以供将来回忆。
+    #
+    #     参数:
+    #     key (str): 信息的键，用于回忆信息时使用。
+    #     """
+    #     pass
 
     @abstractmethod
     def recall(self, key: str) -> any:

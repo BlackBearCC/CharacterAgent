@@ -6,7 +6,7 @@ from typing import Any, Dict, List, AsyncGenerator
 
 from langchain_community.llms.tongyi import Tongyi
 from langchain_core.language_models import BaseLLM, BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, BaseMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
@@ -24,6 +24,9 @@ from ai.prompts.prompt_emum import PromptType
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
 from ai.prompts.task import EVENT_SUMMARY_TEMPLATE, BALDERDASH_TEMPLATE
 from app.core.abstract_Agent import AbstractAgent
+from app.core.tools.dialogue_tool import multiply
+from app.core.tools.tools import emotion_companion, fact_conversion, information_lookup, express_needs, \
+    opinion_evaluation, defensive_dialogue, repeat_expression
 from app.service.services import DBContext
 
 
@@ -82,7 +85,59 @@ class CharacterAgent(AbstractAgent):
 
         self.user_input = ""
 
+    async def response_fast(self, prompt_type: PromptType, db_context: DBContext, role_status, user_name, role_name, guid, query,
+                            llm,remember:bool=True)->AsyncGenerator:
+        """
+        异步生成并流式返回快速聊天的响应。
 
+        参数:
+        - prompt_type: 提示类型，例如PromptType.FAST_CHAT。
+        - db_context: 数据库上下文对象，用于获取消息历史。
+        - role_status: 角色状态信息。
+        - user_name: 用户名。
+        - role_name: 角色名称。
+        - guid: 消息唯一标识。
+        - query: 用户的查询内容。
+        - llm: 大型语言模型实例，用于生成回复。
+        """
+        # human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
+        #                         generate_from="GameUser")
+        # logging.info(f"{guid},User Input: {query}")  # 记录用户输入的日志
+        # db_context.message_memory.add_message(human_message)
+        # 生成系统提示并替换特定标记
+        system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,
+                                                     role_status=role_status, user=user_name, char=role_name)
+
+        # 获取消息历史
+        messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
+        print(messages)
+        messages.append(HumanMessage(content=query))
+
+        # 构造聊天提示模板
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="message"),
+        ])
+
+        # 创建快速回复链
+        fast_chain = prompt | llm
+
+        results = ""
+        response_metadata = None
+
+        # 异步流式处理回复
+        async for r in fast_chain.astream({"message": messages}):
+            results += r.content
+            response_metadata = r.response_metadata
+            # 封装并发送数据
+            data_to_send = json.dumps({"action": "快速回复", "text": r.content}, ensure_ascii=False)
+            yield data_to_send
+        if remember:
+            human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
+                                    generate_from="GameUser")
+            ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results, generate_from="快速回复")
+            messages = [human_message, ai_message]
+            await self.remember(messages=messages, db_context=db_context)
 
     async def rute_retriever(self, guid:str,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm:BaseChatModel)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
@@ -305,37 +360,21 @@ class CharacterAgent(AbstractAgent):
 
         if avg_score > self.similarity_threshold:
             print("Agent : 相似度分数高于阈值，使用FastChain 进行回答")
-            system_prompt = self._generate_system_prompt(prompt_type=PromptType.FAST_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
-            # print("system_prompt:"+system_prompt)
-            system_prompt=system_prompt.replace("__classic_scenes__",combined_content)
-            messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
-            # last_message = HumanMessage(content=query)
-            # messages.append(last_message)
-            print("message_memory:"+str(messages))
-            # messages.append(HumanMessage(content=query))
-            prompt = ChatPromptTemplate.from_messages(
-                [
-                    ("system",system_prompt),
-                    MessagesPlaceholder(variable_name="message"),
-                ]
-            )
+            async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+                                              role_status=role_status,
+                                              user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
+                yield r
 
-            fast_chain = prompt | llm
-            results = ""
-            response_metadata = None
-            async for r in fast_chain.astream({"message": messages}):
-                results += r.content
-                response_metadata = r.response_metadata
-                data_to_send = json.dumps({"action": "快速回复", "text": r.content}, ensure_ascii=False)
-                yield data_to_send
 
-            logging.info(f"Agent Fast Chain Output: {results}")
-            ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
-                                 generate_from="快速回复",call_step=json.dumps(response_metadata))
-            db_context.message_memory.add_message(ai_message)
+            # logging.info(f"Agent Fast Chain Output: {results}")
+            # ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
+            #                      generate_from="快速回复",call_step=json.dumps(response_metadata))
+            # db_context.message_memory.add_message(ai_message)
 
         else:
             print("Agent : 相似度分数低于阈值，使用DeepChain 进行回答")
+
+
             llm_kwargs = {"tools": tools, "result_format": "message"}
             system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
             messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
@@ -344,9 +383,18 @@ class CharacterAgent(AbstractAgent):
             # db_context.message_memory.add_message(human_message)
             # last_message = HumanMessage(content=query)
             # messages.append(last_message)
-
+            human_message = HumanMessage(content=query)
+            messages.append(human_message)
             # lm_with_tools = llm.bind(**llm_kwargs)
-            lm_with_tools = llm.bind(**llm_kwargs)
+            lm_with_tools = llm.bind_tools([
+                emotion_companion,
+                fact_conversion,
+                express_needs,
+                information_lookup,
+                opinion_evaluation,
+                defensive_dialogue,
+                repeat_expression
+            ])
             print("message_memory:" + str(messages))
             # messages.append(HumanMessage(content=query))
             prompt = ChatPromptTemplate.from_messages(
@@ -359,12 +407,14 @@ class CharacterAgent(AbstractAgent):
             function_name = None
             json_buff = ""
             deep_chain = prompt | lm_with_tools
+            is_use_fast_chain = False
             is_json_started = False  # 标记是否已遇到开头的'{'
             async for chunk in deep_chain.astream({"message": messages}):
                 print(chunk)
                 tool_calls = chunk.additional_kwargs.get('tool_calls')
+                chunk_content = chunk.content
                 # print("tool_calls:" + str(tool_calls))
-                if tool_calls:
+                if chunk_content == "" and tool_calls:
                     # tool_calls = chunk.additional_kwargs.get('tool_calls', [])
                     for call in tool_calls:
                         function_data = call.get('function', {})
@@ -375,8 +425,20 @@ class CharacterAgent(AbstractAgent):
                         result += function_data.get('arguments', '')
                         data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
                         yield data_to_send
-                elif chunk.content != "":
-                    logging.info(f"Agent Deep Chain 生成策略失败: {chunk.content}")
+
+                else:
+                    is_use_fast_chain=True
+                    logging.info(f"Agent Deep Chain 生成策略失败,使用快速回复: {chunk.content}")
+                    break
+            if is_use_fast_chain:
+                async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+                                                  role_status=role_status,
+                                                  user_name=user_name, role_name=role_name, guid=guid, query=query,
+                                                  llm=llm):
+                    yield r
+
+                # elif chunk.content != "":
+                    # logging.info(f"Agent Deep Chain 生成策略失败: {chunk.content}")
 
                     # # 检查当前chunk是否以'{'开始，若为真则标记json已经开始
                     # if '{' in chunk.content:
@@ -628,9 +690,9 @@ class CharacterAgent(AbstractAgent):
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
         # retriever_chain = retriever_lambda
-        human_message = Message(user_guid=guid, type="human", role=user_name, message=input_text,generate_from="GameUser")
-        logging.info(f"{guid},User Input: {input_text}")  # 记录用户输入的日志
-        db_context.message_memory.add_message(human_message)
+        # human_message = Message(user_guid=guid, type="human", role=user_name, message=input_text,generate_from="GameUser")
+        # logging.info(f"{guid},User Input: {input_text}")  # 记录用户输入的日志
+        # db_context.message_memory.add_message(human_message)
         async for chunk in self.rute_retriever(guid=guid,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm):
             yield chunk
         asyncio.create_task(self.memory_summary(guid, user_name, role_name, 10, db_context))
@@ -895,8 +957,9 @@ class CharacterAgent(AbstractAgent):
     def perform_task(self, task: str, data: dict) -> int:
         return 200
 
-    def remember(self, key: str):
-        return 200
+    async def remember(self, messages: List[BaseMessage],db_context:DBContext):
+        db_context.message_memory.add_messages(reversed(messages))
+
 
     def recall(self, key: str) -> any:
         pass
