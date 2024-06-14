@@ -161,202 +161,6 @@ class CharacterAgent(AbstractAgent):
         history = db_context.message_memory.buffer_messages(guid,user_name,role_name, 10)
         data_to_send = json.dumps({"action": None, "text": None})
         # print("message_memory:"+history)
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "情感陪伴",
-                    "description": "当你判断用户需要情感陪伴时非常有用",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "emotion_status": {
-                                "type": "string",
-                                "description": "用户情感状态",
-                            },
-                            "emotion_intensity": {
-                                "type": "string",
-                                "description": "用户情感强度",
-                            },
-                            "user_needs": {
-                                "type": "string",
-                                "description": "分析的用户现在真实需求",
-                            },
-                            "critical_context": {
-                                "type": "string",
-                                "description": "可参考的关键上下文信息",
-                            },
-                            "reply_instruction": {
-                                "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
-                            }
-                        },
-
-                    },
-                    "required": ["emotion_status", "emotion_intensity", "user_needs","critical_context", "reply_instruction"],
-
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "事实转换",
-                    "description": "当你需要将现实世界的信息（著名人物、地点、事件、物品等）转化为角色视角下的对应物时非常有用",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "real_world_entity": {
-                                "type": "string",
-                                "description": "需要转换的现实世界实体（人物、地点、事件、物品）"
-                            },
-                            "character_perspective": {
-                                "type": "string",
-                                "description": "你的角色视角或背景中的所能对应的实体"
-                            },
-                            "reply_instruction": {
-                                "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
-                            }
-                        }
-                    },
-                    "required": ["real_world_entity", "character_perspective", "reply_instruction"],
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "表达诉求",
-                    "description": "当你需要基于自身状态和马斯洛需求理论的需求层级表达自身诉求时非常有用",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "current_role_state": {
-                                "type": "string",
-                                "description": "角色自身当前的状态"
-                            },
-                            "maslow_hierarchy_level": {
-                                "type": "string",
-                                "description": "需求层级，根据马斯洛需求层次理论"
-                            },
-                            "reply_instruction": {
-                                "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
-                            }
-                        }
-                    },
-                    "required": ["current_role_state", "maslow_hierarchy_level", "reply_instruction"],
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "信息查找",
-                    "description": "只能用于查找和回答有关冰箱或储物柜内物品的具体信息，如数量、内容、位置等。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "storage_type": {
-                                "type": "string",
-                                "description": "储存类型（冰箱或储物柜）"
-                            },
-                        },
-                        "reply_instruction": {
-                            "type": "string",
-                            "description": "结合人设和上下文，输出你的指导回复的关键词组（不超过10个字，不可以编造查询结果！）",
-                        }
-                    },
-                    "required": ["storage_type","reply_instruction"],
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "观点评价",
-                    "description": "对特定观点或实体发表评价，并用1-5的Likert量表进行评分。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "opinion_id": {
-                                "type": "int",
-                                "description": "引用观点的ID"
-                            },
-                            "entity_or_opinion": {
-                                "type": "string",
-                                "description": "被评价的实体或观点"
-                            },
-                            "evaluation_scale": {
-                                "type": "string",
-                                "description": "评价的Likert量表范围（1-5）"
-                            },
-                            "evaluation_reason": {
-                                "type": "string",
-                                "description": "评价的原因"
-                            },
-                            "reply_instruction": {
-                                "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
-                            }
-                        }
-                    },
-                    "required": ["opinion_id", "entity_or_opinion", "evaluation_scale", "evaluation_reason","reply_instruction"]
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "防御对话",
-                    "description": "当面对攻击或诱导时保护对话的策略，保持角色的核心属性和知识范围。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "attack_type": {
-                                "type": "string",
-                                "description": "攻击或诱导对话的类型及内容"
-                            },
-                            "core_attributes": {
-                                "type": "string",
-                                "description": "角色的核心属性"
-                            },
-                            "reply_instruction": {
-                                "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
-                            }
-                        },
-                    },
-                    "required": ["attack_type", "core_attributes", "reply_instruction"]
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "重复表达",
-                    "description": "当你发现用户重复提问时非常有用，对历史中已经回答过且重复的问题进行回应，展示角色的情绪和态度。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "history_question": {
-                                "type": "string",
-                                "description": "历史中已回答过的问题"
-                            },
-                            "key_role_state": {
-                                "type": "string",
-                                "description": "角色自身的关键状态"
-                            },
-                            "expression_attitude": {
-                                "type": "string",
-                                "description": "综合考虑角色对重复问题的情绪和态度"
-                            },
-                            "reply_instruction": {
-                                "type": "string",
-                                "description": "结合人设和上下文和以上的值，输出你的指导回复的关键词组（不超过10个字）",
-                            }
-                        },
-
-                    },
-                    "required": ["history_question", "key_role_state", "expression_attitude", "reply_instruction"],
-                }
-            }
-        ]
 
         if avg_score > self.similarity_threshold:
             print("Agent : 相似度分数高于阈值，使用FastChain 进行回答")
@@ -373,9 +177,6 @@ class CharacterAgent(AbstractAgent):
 
         else:
             print("Agent : 相似度分数低于阈值，使用DeepChain 进行回答")
-
-
-            llm_kwargs = {"tools": tools, "result_format": "message"}
             system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
             messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
             # human_message = Message(user_guid=guid, type="human", role=user_name, message="外卖呢下雨没",
@@ -408,7 +209,6 @@ class CharacterAgent(AbstractAgent):
             json_buff = ""
             deep_chain = prompt | lm_with_tools
             is_use_fast_chain = False
-            is_json_started = False  # 标记是否已遇到开头的'{'
             async for chunk in deep_chain.astream({"message": messages}):
                 print(chunk)
                 tool_calls = chunk.additional_kwargs.get('tool_calls')
@@ -428,7 +228,7 @@ class CharacterAgent(AbstractAgent):
 
                 else:
                     is_use_fast_chain=True
-                    logging.info(f"Agent Deep Chain 生成策略失败,使用快速回复: {chunk.content}")
+                    logging.info(f"Agent Deep Chain 生成策略异常,使用快速回复: {chunk.content}")
                     break
             if is_use_fast_chain:
                 async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
@@ -436,57 +236,38 @@ class CharacterAgent(AbstractAgent):
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query,
                                                   llm=llm):
                     yield r
-
-                # elif chunk.content != "":
-                    # logging.info(f"Agent Deep Chain 生成策略失败: {chunk.content}")
-
-                    # # 检查当前chunk是否以'{'开始，若为真则标记json已经开始
-                    # if '{' in chunk.content:
-                    #     is_json_started = True
-                    #     logging.info(f"Agent Deep Chain 深度回复输出了json内容: {chunk.content}")
-                    # else:
-                    #     if is_json_started:
-                    #         result += chunk.content
-                    #         data_to_send = json.dumps({"action": "深度回复", "text": None},
-                    #                                   ensure_ascii=False)
-                    #         yield data_to_send
-                    #     else:
-                    #         function_name = "深度回复"
-                    #         result += chunk.content
-                    #         data_to_send = json.dumps({"action": function_name, "text": chunk.content},
-                    #                                   ensure_ascii=False)
-                    #         yield data_to_send
-
-
-            # 异步生成结束后，检查result是否为有效的JSON
-            try:
-                if function_name != "深度回复":
+            else:
+                # 异步生成结束后，检查result是否为有效的JSON
+                try:
                     json_object = json.loads(result)
                     tool_result = ""
                     async for chunk in await self.use_tool_by_name(guid=guid,
-                                                                   user_name=user_name,
-                                                                   role_name=role_name,
-                                                                   role_status=role_status,
-                                                                   db_context=db_context,
-                                                                   action_name=function_name,
-                                                                   action_input=json_object
-                                                                   ):
+                                                                       user_name=user_name,
+                                                                       role_name=role_name,
+                                                                       role_status=role_status,
+                                                                       db_context=db_context,
+                                                                       action_name=function_name,
+                                                                       action_input=json_object
+                                                                       ):
                         data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
                         tool_result += chunk
                         yield data_to_send
+                    human_message = Message(user_guid=guid, type="human", role=user_name, message=query,generate_from="GameUser")
                     ai_message = Message(user_guid=guid, type="ai", role=role_name, message=tool_result,
-                                         generate_from=function_name,
-                                         call_step=json.dumps(json_object, ensure_ascii=False))
-                    db_context.message_memory.add_message(ai_message)
-                    print("Result is valid JSON.")
-                else:
-                    logging.info(f"Agent Deep Chain 深度回复输出了json: {result}")
+                                             generate_from=function_name,
+                                             call_step=json.dumps(json_object, ensure_ascii=False))
 
-            except json.JSONDecodeError:
-                ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
-                                     generate_from=function_name, call_step="Deep/Error")
-                db_context.message_memory.add_message(ai_message)
-                print("Result is NOT valid JSON.")
+                    db_context.message_memory.add_messages([human_message,ai_message])
+                    print("Result is valid JSON.")
+                except json.JSONDecodeError:
+                    logging.error("Result is not valid JSON.使用fastchain")
+                    async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+                                                      role_status=role_status,
+                                                      user_name=user_name, role_name=role_name, guid=guid, query=query,
+                                                      llm=llm):
+                        yield r
+
+
 
             # ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
             #                      generate_from=function_name, call_step=)

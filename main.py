@@ -325,12 +325,12 @@ async def chat_generator(uid: str, user_name: str, role_name: str, input_text: s
 
     # while retries > 0:
     #     try:
-    results=""
+
     async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
                                                          input_text=input_text, role_status=role_status,
                                                          db_context=db_context, llm=llm):
-                print(response_chunk, end="", flush=True)
-                results+=response_chunk
+                # print(response_chunk, end="", flush=True)
+
                 yield response_chunk
 
     # human_message = Message(user_guid=uid, type="human", role=role_name, message=input_text)
