@@ -210,7 +210,7 @@ class CharacterAgent(AbstractAgent):
             deep_chain = prompt | lm_with_tools
             is_use_fast_chain = False
             async for chunk in deep_chain.astream({"message": messages}):
-                print(chunk)
+                # print(chunk)
                 tool_calls = chunk.additional_kwargs.get('tool_calls')
                 chunk_content = chunk.content
                 # print("tool_calls:" + str(tool_calls))
@@ -225,7 +225,6 @@ class CharacterAgent(AbstractAgent):
                         result += function_data.get('arguments', '')
                         data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
                         yield data_to_send
-
                 else:
                     is_use_fast_chain=True
                     logging.info(f"Agent Deep Chain 生成策略异常,使用快速回复: {chunk.content}")
