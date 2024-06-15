@@ -325,19 +325,21 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
 
 
 async def chat_generator(uid: str, user_name: str, role_name: str, input_text: str, role_status: str,
-                        db_context: DBContext, llm: BaseChatModel) -> AsyncGenerator[str, None]:
+                        db_context: DBContext, llm: BaseChatModel,backup_llm:BaseChatModel) -> AsyncGenerator[str, None]:
     retries = 3
     delay = 1  # 初始重试延迟时间（秒）
     max_delay = 6  # 最大重试延迟时间（秒）
     errors = []
+    used_backup = False  # 标记是否已使用备份LLM
 
     while retries > 0:
+        current_llm = backup_llm if used_backup else llm  # 首次或已使用备份时切换LLM
+        used_backup = True  # 在第一次重试后标记为已使用备份
+
         try:
             async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
                                                             input_text=input_text, role_status=role_status,
-                                                            db_context=db_context, llm=llm):
-                # print(response_chunk, end="", flush=True)
-
+                                                            db_context=db_context, llm=current_llm):
                 yield response_chunk
 
             # 成功获取数据，退出循环
@@ -384,8 +386,10 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    message_summary: MessageSummary = Depends(get_message_summary),
                    entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
     return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
+
 @app.post("/game/chat")
-async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm:BaseChatModel = Depends(get_glm4)):
+async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm:BaseChatModel = Depends(get_chat_qwen_max),backup_llm:BaseChatModel = Depends(get_glm4)):
+    logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     try:
         user = db_context.user_db.get_user_by_game_uid(request.uid)
@@ -397,7 +401,7 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
         role_name = user.role_name
 
         generator = chat_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
-                                   llm=llm,
+                                   llm=llm,backup_llm=backup_llm,
                                              db_context=db_context)
         return EventSourceResponse(generator)
 
@@ -486,15 +490,20 @@ async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db
 
 
 
-async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseChatModel, event: str, db_context: DBContext) -> AsyncGenerator:
+async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseChatModel,backup_llm:BaseChatModel, event: str, db_context: DBContext) -> AsyncGenerator:
     retries = 3
     delay = 1  # 初始延迟为1秒
     max_delay = 10  # 最大延迟为10秒
     errors = []
+    used_backup = False  # 标记是否已使用备份LLM
+
     while retries > 0:
+        current_llm = backup_llm if used_backup else llm  # 首次或已使用备份时切换LLM
+        used_backup = True  # 在第一次重试后标记为已使用备份
+
         try:
             async for response_chunk in tuji_agent.event_response(guid=uid, user_name=user_name, role_name=role_name,
-                                                                  llm=llm, event=event, db_context=db_context):
+                                                                  llm=current_llm, event=event, db_context=db_context):
                 yield response_chunk
             break
         except Exception as e:
@@ -513,7 +522,7 @@ async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseCha
 
 
 @app.post("/game/event_response")
-async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_chat_qwen_max)):
+async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_glm4),backup_llm:BaseChatModel=Depends(get_qwen_plus)):
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -532,7 +541,7 @@ async def event_response(request: EventRequest,db_context: DBContext = Depends(g
         logging.info(f"收到游戏事件请求，UID: {request.uid}。 事件: {request.event_name}")
         if request.need_response:
             return EventSourceResponse(
-                event_generator(uid, user_name=user_name, role_name=role_name, llm=llm, event=event,
+                event_generator(uid, user_name=user_name, role_name=role_name, llm=llm,backup_llm=backup_llm, event=event,
                                 db_context=db_context))
 
         else:
