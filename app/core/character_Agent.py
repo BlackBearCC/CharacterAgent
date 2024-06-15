@@ -62,7 +62,7 @@ class CharacterAgent(AbstractAgent):
 
 
         # self.similarity_threshold = 0.365
-        self.similarity_threshold = 888
+        self.similarity_threshold = 9500
         self.base_info = base_info
 
 
@@ -107,7 +107,7 @@ class CharacterAgent(AbstractAgent):
         # 生成系统提示并替换特定标记
         system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,
                                                      role_status=role_status, user=user_name, char=role_name)
-
+        print(system_prompt)
         # 获取消息历史
         messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
         print(messages)
@@ -162,8 +162,8 @@ class CharacterAgent(AbstractAgent):
         data_to_send = json.dumps({"action": None, "text": None})
         # print("message_memory:"+history)
 
-        if avg_score > self.similarity_threshold:
-            print("Agent : 相似度分数高于阈值，使用FastChain 进行回答")
+        if avg_score < self.similarity_threshold:
+            print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
             async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
                                               role_status=role_status,
                                               user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
@@ -176,7 +176,7 @@ class CharacterAgent(AbstractAgent):
             # db_context.message_memory.add_message(ai_message)
 
         else:
-            print("Agent : 相似度分数低于阈值，使用DeepChain 进行回答")
+            print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
             system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
             messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
             # human_message = Message(user_guid=guid, type="human", role=user_name, message="外卖呢下雨没",
@@ -450,7 +450,7 @@ class CharacterAgent(AbstractAgent):
                                                                                                  message_threshold)
         if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
             logging.info("开始更新实体记忆")
-            llm = Tongyi(model_name="qwen-turbo", temperature=0.7,dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+            llm = Tongyi(model_name="qwen-plus", temperature=0.7,dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
             entity = db_context.entity_memory.get_entity(guid)
             output_parser = StrOutputParser()
             if entity is None:
@@ -567,13 +567,14 @@ class CharacterAgent(AbstractAgent):
         system_prompt = self._generate_system_prompt(prompt_type=PromptType.WRITE_DIARY,db_context=db_context,guid=guid,role=self.base_info,user=user_name,char=role_name,date_start=date_start,date_end=date_end)
         prompt_template = PromptTemplate.from_template(system_prompt)
         output_parser = StrOutputParser()
-        final_diary = ""
+        final_diary = "这是一篇日记，保留日记主要内容生成简短日记："
         diary_chain =  prompt_template | llm | output_parser
         async for chunk in diary_chain.astream({}):
             final_diary += chunk
             yield chunk
         logging.info(f"Agent Write Diary: {final_diary[:30]}...")
-        db_context.message_memory.add_message(Message(user_guid=guid, type="event", role="系统事件", message=f"{role_name}写了一篇日记：{final_diary}",
+        result=await self.memory_summary(user_name=user_name,role_name=role_name,guid=guid,is_free=True,db_context=db_context,message_content=final_diary,message_threshold=1)
+        db_context.message_memory.add_message(Message(user_guid=guid, type="event", role="系统事件", message=f"{role_name}写了一篇日记,概要是：{result}",
                                                         generate_from="WriteDiary"))
 
 
@@ -711,12 +712,9 @@ class CharacterAgent(AbstractAgent):
 
 
 
-    async def memory_summary(self,user_name,role_name,guid:str,message_threshold:int,db_context:DBContext,llm=None):
+    async def memory_summary(self,user_name,role_name,guid:str,message_threshold:int,db_context:DBContext,llm=None,is_free=False,message_content=""):
         print(f"Agent Summary: 判断是否需要生成摘要...")
-        message_content, message_ids =await db_context.message_memory.check_and_buffer_messages(guid, user_name, role_name,
-                                                                                           message_threshold)
-        if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
-            print("生成摘要...")
+        if is_free:
             if llm is None:
                 llm = Tongyi(model_name="qwen-turbo", temperature=0.7,
                              dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
@@ -724,20 +722,42 @@ class CharacterAgent(AbstractAgent):
             output_parser = StrOutputParser()
 
             chain = prompt_template | llm | output_parser
-            results = ""
-            async for chunk in chain.astream({"history": message_content}):
-                results += chunk
+            results = chain.invoke({"history": message_content})
+            logging.info(f"Agent Summary自由摘要: {results}")
+            return results
+
+            # async for chunk in chain.ainvoke({"history": message_content}):
+            #     results += chunk
 
             # 保存摘要到Message_Summary表，并关联消息ID
-            summary = Message_Summary(user_guid=guid,summary=results)
-            db_context.message_summary.add_summary(message_summary=summary,message_ids=message_ids)
-            logging.info(f"Agent Summary: {summary}")
-            # print(message_summary_id)
-            # db_context.message_memory.bind_summary_id_to_messages(message_ids, message_summary_id)
+            # summary = Message_Summary(user_guid=guid, summary=results)
+            # db_context.message_summary.add_summary(message_summary=summary)
+
         else:
-            print("不需要生成摘要")
+            message_content, message_ids = await db_context.message_memory.check_and_buffer_messages(guid, user_name,
+                                                                                                     role_name,
+                                                                                                     message_threshold)
+            if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
+                print("生成摘要...")
+                if llm is None:
+                    llm = Tongyi(model_name="qwen-turbo", temperature=0.7,
+                                 dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+                prompt_template = PromptTemplate(template=EVENT_SUMMARY_TEMPLATE, input_variables=["history"])
+                output_parser = StrOutputParser()
 
+                chain = prompt_template | llm | output_parser
+                results = ""
+                async for chunk in chain.astream({"history": message_content}):
+                    results += chunk
 
+                # 保存摘要到Message_Summary表，并关联消息ID
+                summary = Message_Summary(user_guid=guid, summary=results)
+                db_context.message_summary.add_summary(message_summary=summary, message_ids=message_ids)
+                logging.info(f"Agent Summary: {summary}")
+                # print(message_summary_id)
+                # db_context.message_memory.bind_summary_id_to_messages(message_ids, message_summary_id)
+            else:
+                print("不需要生成摘要")
 
     def perform_task(self, task: str, data: dict) -> int:
         return 200

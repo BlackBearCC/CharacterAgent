@@ -1,8 +1,9 @@
 sqlalchemy~=1.4.51
-langchain~=0.1.5
+langchain==0.2.4
+langchain-community==0.2.4
 aiohttp~=3.8.5
 pymilvus
-dashscope~=1.14.1
+dashscope
 pydantic~=2.5.3
 fastapi~=0.104.1
 starlette~=0.27.0
@@ -22,7 +23,7 @@ colorama~=0.4.6
 uvicorn
 itsdangerous
 unstructured
-chromadb
+
 
 python-dotenv
 gradio_client

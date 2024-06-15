@@ -37,19 +37,23 @@ DEEP_CHARACTER_PROMPT = BASE_CHARACTER_PROMPT+"""
 </USER_INFO>
 
 <OPINION>
+你的观点：
 (1-5的Likert量表评分形式及原因)
 {opinion}
 </OPINION>
 
 <RECENT_EVENT>
+近期事件：
 {recent_event}
 </RECENT_EVENT>
 
 <ROLE_STATE>
+你的当前状态：
 {role_state}
 </ROLE_STATE>
 
 <ENVIRONMENT>
+你所处的环境：
 {environment}
 </ENVIRONMENT>
 
@@ -63,7 +67,7 @@ DEEP_CHARACTER_PROMPT = BASE_CHARACTER_PROMPT+"""
 5.注意话题转折时的潜在含义
 6.在回答中优先关注我的情感和行为和对话上下文。细致观察我提供的信息，并根据其情感状态进行深入交流。其次回答我的具体问题，同时保持对话的连贯性，使用平滑的话题转折。
 7.基于之前的对话内容和USER_INFO提出具体问题，增加对话的深度和互动性，更加关心并且对我的生活有着更深入的了解。
-8.综合以上结果，选择合适tool之一生成json格式的回复。
+8.综合以上结果，选择一个合适tool生成json格式的回复，禁止你直接回答任何内容。
 </TASK>
 
 <ANNOUNCEMENTS>
@@ -74,7 +78,7 @@ ROLE_EXPERIENCE只是你的经历，你不需要经常在对话中提起和关�
 注意遵循ROLE_STYLE的特征来组织你的回复！！保持内容剧作感，保持流行日本动漫角色的表达风格。
 在你输出的指令中，ROLE的行动必须是合理的，必须符合ROLE的设定和工具的能力。
 ----------------------------------------------------------
-
+你要直接响应的是最后一条消息！
 ##开始
 
 """

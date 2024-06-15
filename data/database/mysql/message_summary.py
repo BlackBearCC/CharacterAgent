@@ -17,21 +17,28 @@ class MessageSummary:
     def __init__(self, session: scoped_session):
         self.session = session
 
-    def add_summary(self, message_summary: Message_Summary, message_ids: List[int]) -> int:
+    def add_summary(self, message_summary: Message_Summary, message_ids: List[int]=None) -> int:
         try:
-            self.session.add(message_summary)
-            self.session.flush()  # 使用 flush 来确保 message_summary 获取到 ID，但不提交整个事务
-            summary_id = message_summary.id
+            if message_ids:
+                self.session.add(message_summary)
+                self.session.flush()  # 使用 flush 来确保 message_summary 获取到 ID，但不提交整个事务
+                summary_id = message_summary.id
 
-            messages = self.session.query(Message).filter(Message.id.in_(message_ids)).all()
-            for message in messages:
-                message.summary_id = summary_id
+                messages = self.session.query(Message).filter(Message.id.in_(message_ids)).all()
+                for message in messages:
+                    message.summary_id = summary_id
 
-            self.session.commit()
-            return summary_id
+                self.session.commit()
+                return summary_id
+            else:
+                self.session.add(message_summary)
+                self.session.commit()
+                return message_summary.id
+
         except Exception as e:
             self.session.rollback()
             raise Exception(f"Failed to add summary and bind messages: {e}")
+
 
     def get_summaries_within_period(self, session, guid, start_date=None, end_date=None, max_count=100):
         """
