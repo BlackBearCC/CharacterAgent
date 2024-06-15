@@ -11,12 +11,15 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
 from langchain_core.tools import tool
+from openai import RateLimitError
 from pydantic import BaseModel, Field
 
 from ai.models.buffer import get_prefixed_buffer_string
 
 
 from ai.models.role_memory import OpinionMemory
+from ai.prompts.deep_agent import DEEP_INTENT, DEEP_EMOTION, DEEP_CONTEXT, DEEP_CHOICE, DEEP_OUTPUT, \
+    DEEP_STRATEGY_ENTITY_TRANSFER, DEEP_STRATEGY_CONTEXT_KEY, DEEP_STRATEGY_USER_ENTITY, DEEP_FAST_RUTE
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
@@ -100,10 +103,6 @@ class CharacterAgent(AbstractAgent):
         - query: 用户的查询内容。
         - llm: 大型语言模型实例，用于生成回复。
         """
-        # human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
-        #                         generate_from="GameUser")
-        # logging.info(f"{guid},User Input: {query}")  # 记录用户输入的日志
-        # db_context.message_memory.add_message(human_message)
         # 生成系统提示并替换特定标记
         system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,
                                                      role_status=role_status, user=user_name, char=role_name)
@@ -139,6 +138,295 @@ class CharacterAgent(AbstractAgent):
             messages = [human_message, ai_message]
             await self.remember(messages=messages, db_context=db_context)
 
+    async def agent_deep_intent(self,db_context:DBContext, uid, input_text, llm):
+        logging.info("Agent : 意图识别...")
+        messages = db_context.message_memory.buffer_messages(uid, count=10)
+        # print(messages)
+
+        system_prompt = DEEP_INTENT.format(
+            conversation_history=messages,
+            user_input=input_text
+        )
+        # print(system_prompt)
+
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_Intent: {response}")
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_Intent: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    async def agent_deep_emotion(self, db_context: DBContext, uid, input_text, llm):
+        logging.info("Agent : 情感分析...")
+        messages = db_context.message_memory.buffer_messages(uid, count=10)
+        # print(messages)
+
+        system_prompt = DEEP_EMOTION.format(
+            conversation_history=messages,
+            user_input=input_text
+        )
+        # print(system_prompt)
+
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_Emotion: {response}")
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_Emotion: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    async def agent_deep_context(self, db_context: DBContext, uid, input_text, llm):
+        logging.info("Agent : 关键内容提取...")
+        messages = db_context.message_memory.buffer_messages(uid, count=10)
+        # print(messages)
+
+        system_prompt = DEEP_CONTEXT.format(
+            conversation_history=messages,
+            user_input=input_text
+        )
+        # print(system_prompt)
+
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_key_context: {response}")
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_key_context: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+    async def agent_deep_choice(self, db_context: DBContext, uid, input_text,result_dict ,llm):
+        logging.info("Agent : 对话策略选择...")
+        # messages = db_context.message_memory.buffer_messages(uid, count=30)
+        # print(messages)
+        # ollm = Tongyi(model_name="qwen-turbo", temperature=0.7,dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+
+        intent_analysis = result_dict.get('intent', '无意图信息')
+        emotion_interpretation = result_dict.get('emotion', '无情绪信息')
+        contextual_understanding = result_dict.get('context', '无上下文信息')
+        system_prompt = DEEP_CHOICE.format(
+            role_info=self.base_info,
+            intent=intent_analysis,
+            emotion=emotion_interpretation,
+            context=contextual_understanding,
+            user_input=input_text
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_choice: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_choice: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+    async def agent_deep_output(self, db_context: DBContext, uid,role_status, input_text, result_dict, llm):
+        logging.info("Agent : 角色回复生成...")
+        # messages = db_context.message_memory.buffer_messages(uid, count=30)
+        # print(messages)
+        intent_analysis = result_dict.get('intent', '无意图信息')
+        emotion_interpretation = result_dict.get('emotion', '无情绪信息')
+        contextual_understanding = result_dict.get('context', '无上下文信息')
+        chosen_strategies = result_dict.get('chosen_strategies', '无选择策略信息')
+        strategy_result = result_dict.get('strategy_result', '无策略结果信息')
+        role_chat_style = result_dict.get('role_chat_style', '活泼')
+        llm =Tongyi(model_name="qwen-max",dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+        system_prompt = DEEP_OUTPUT.format(
+            intent=intent_analysis,
+            emotion=emotion_interpretation,
+            context=contextual_understanding,
+            user_input=input_text,
+            role_info = self.base_info+"\n角色语言示例："+role_chat_style,
+            role_status=role_status,
+            chosen_strategies=chosen_strategies,
+            strategy_result=strategy_result
+        )
+        # print(system_prompt)
+
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+
+            async for chunk in chain.astream({"user_input": input_text}):
+                data_to_send = json.dumps({"action": "情感陪伴", "text": chunk}, ensure_ascii=False)
+                yield data_to_send
+                # yield chunk
+            # logging.info(f"Agent_output: {result}")
+
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+
+            async for chunk in chain.astream({"user_input": input_text}):
+                data_to_send = json.dumps({"action": "情感陪伴", "text": chunk}, ensure_ascii=False)
+                yield data_to_send
+            # logging.info(f"Agent_output: {result}")
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    @staticmethod
+    async def handle_context_memory(role_info,db_context, uid, input_text, result_dict, llm):
+        """处理上下文记忆的逻辑"""
+        logging.info("上下文记忆回复执行...")
+        conversation_history = db_context.message_memory.buffer_messages(uid, count=50)
+        summary = db_context.message_summary.buffer_summaries(uid, max_count=20)
+        contextual_analysis=result_dict.get('context', '无上下文信息')
+        system_prompt = DEEP_STRATEGY_CONTEXT_KEY.format(
+            role_info=role_info,
+            user_input=input_text,
+            contextual_analysis=contextual_analysis,
+            conversation_history=conversation_history,
+            summary=summary,
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_上下文记忆回复输出: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_上下文记忆回复输出: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    @staticmethod
+    async def handle_user_profile(role_info,db_context, uid, input_text, result_dict, llm):
+        """处理用户画像回复的逻辑"""
+        logging.info("Agent : 用户实体回复执行...")
+        user_entity = db_context.entity_memory.get_entity(uid)
+        system_prompt = DEEP_STRATEGY_USER_ENTITY.format(
+            role_info=role_info,
+            user_input=input_text,
+            user_entity=user_entity,
+        )
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_用户实体回复输出: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_用户实体回复输出: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+
+    @staticmethod
+    async def handle_entity_transfer(role_info,db_context, uid, input_text, result_dict, llm):
+        logging.info("Agent : 实体转换策略执行...")
+        system_prompt = DEEP_STRATEGY_ENTITY_TRANSFER.format(
+            role_info=role_info,
+            user_input=input_text
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_实体转换输出: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_实体转换输出: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    @staticmethod
+    async def conversation_rute( role_info,intent_analysis, input_text,match_kg,llm):
+        logging.info("Agent : 对话模式匹配...")
+        system_prompt = DEEP_FAST_RUTE.format(
+            role_info=role_info,
+            user_input=input_text,
+            intent_analysis=intent_analysis,
+            match_kg=match_kg
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_对话模式匹配: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_对话模式匹配: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+
     async def rute_retriever(self, guid:str,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm:BaseChatModel)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
         docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
@@ -162,114 +450,211 @@ class CharacterAgent(AbstractAgent):
         data_to_send = json.dumps({"action": None, "text": None})
         # print("message_memory:"+history)
 
-        if avg_score < self.similarity_threshold:
-            print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
+
+        ollm = Tongyi(model_name="qwen-plus", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+        tllm = Tongyi(model_name="qwen-turbo", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+
+        intent = await self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm)
+        conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,match_kg=combined_content,llm=llm)
+        if "禁用" in conversational:
             async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
-                                              role_status=role_status,
-                                              user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
-                yield r
-
-
-            # logging.info(f"Agent Fast Chain Output: {results}")
-            # ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
-            #                      generate_from="快速回复",call_step=json.dumps(response_metadata))
-            # db_context.message_memory.add_message(ai_message)
-
+                                                  role_status=role_status,
+                                                  user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
+                    yield r
         else:
-            print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
-            system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
-            messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
-            # human_message = Message(user_guid=guid, type="human", role=user_name, message="外卖呢下雨没",
-            #                         generate_from="GameUser")
-            # db_context.message_memory.add_message(human_message)
-            # last_message = HumanMessage(content=query)
-            # messages.append(last_message)
-            human_message = HumanMessage(content=query)
-            messages.append(human_message)
-            # lm_with_tools = llm.bind(**llm_kwargs)
-            lm_with_tools = llm.bind_tools([
-                emotion_companion,
-                fact_conversion,
-                express_needs,
-                information_lookup,
-                opinion_evaluation,
-                defensive_dialogue,
-                repeat_expression
-            ])
-            print("message_memory:" + str(messages))
-            # messages.append(HumanMessage(content=query))
-            prompt = ChatPromptTemplate.from_messages(
-                [
-                    ("system", system_prompt),
-                    MessagesPlaceholder(variable_name="message"),
-                ]
-            )
-            result =""
-            function_name = ""
-            json_buff = ""
-            deep_chain = prompt | lm_with_tools
-            is_use_fast_chain = False
-            async for chunk in deep_chain.astream({"message": messages}):
-                print(chunk)
-                tool_calls = chunk.additional_kwargs.get('tool_calls')
-                chunk_content = chunk.content
-                # print("tool_calls:" + str(tool_calls))
-                if chunk_content == "" and tool_calls:
-                    # tool_calls = chunk.additional_kwargs.get('tool_calls', [])
-                    for call in tool_calls:
-                        function_data = call.get('function', {})
-                        # print("function_data:" + str(function_data))
-                        if function_data.get('name'):
-                            new_function_name = function_data.get('name')
-                            if len(new_function_name) <= 4:  # 检查新名称的长度是否小于等于4
-                                function_name += new_function_name  # 累加到现有的function_name
-                            else:
-                                function_name = new_function_name  # 直接替换现有的function_name
-                            # print("function_name:" + function_name)
-                        result += function_data.get('arguments', '')
-                        data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
-                        yield data_to_send
+            tasks = {
+                # 'intent': self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm),
+                'emotion': self.agent_deep_emotion(db_context=db_context, uid=guid, input_text=query, llm=ollm),
+                'context': self.agent_deep_context(db_context=db_context, uid=guid, input_text=query, llm=ollm)
+            }
+            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+            result_dict = {}
+            for key, result in zip(tasks.keys(), results):
+                # 如果有任务抛出异常，这里会捕获异常而不是直接中断程序
+                if isinstance(result, Exception):
+                    result_dict[key] = f"Error: {result}"
                 else:
-                    is_use_fast_chain=True
-                    logging.info(f"Agent Deep Chain 生成策略异常,使用快速回复: {chunk.content}")
-                    break
-            if is_use_fast_chain:
+                    result_dict[key] = result
+            KEYWORD_HANDLERS = {
+                "上下文记忆": self.handle_context_memory,
+                "用户实体": self.handle_user_profile,
+                # "情感共情": self.handle_emotional_engagement,
+                # "持续关注": self.handle_sustained_attention,
+                # "自我特质": self.handle_role_trait_response,
+                # "问候和关心": self.handle_greetings_and_care,
+                # "切换话题": self.handle_topic_switch,
+                # "保持角色": self.handle_maintain_role,
+                "实体转换": self.handle_entity_transfer,
+            }
+            result_dict['intent'] = intent
+            deep_choice_result = await self.agent_deep_choice(db_context=db_context, uid=guid, input_text=query,
+                                                              result_dict=result_dict, llm=ollm)
+            result_dict['chosen_strategies'] = deep_choice_result
+            result_dict['role_chat_style'] = combined_content
+            # 添加判断逻辑
+            matched_keywords = [keyword for keyword in KEYWORD_HANDLERS if keyword in deep_choice_result]
+            strategy_result_value = ""
+            if matched_keywords:
+                tasks = {
+                    keyword: (KEYWORD_HANDLERS[keyword],
+                              {'role_info': self.base_info, 'db_context': db_context, 'uid': guid, 'input_text': query,
+                               'result_dict': result_dict,
+                               'llm': ollm})
+                    for keyword in matched_keywords
+                }
+
+                results = await asyncio.gather(
+                    *[asyncio.create_task(handler(**kwargs)) for handler, kwargs in tasks.values()],
+                    return_exceptions=True
+                )
+
+                for keyword, result in zip(tasks.keys(), results):
+                    if isinstance(result, Exception):
+                        logging.warning(f"处理策略 '{keyword}' 时发生错误: {result}")
+                    else:
+                        strategy_result_value += f"{keyword}: {result}\n"  # 使用换行符分隔每个结果
+                        result_dict['strategy_result'] = strategy_result_value
+
+            else:
+                logging.info("未检测到特定策略")
+
+            result_dict["strategy_result"] = strategy_result_value
+
+            result = ""
+            try:
+                async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,
+                                                      input_text=query, result_dict=result_dict, llm=ollm):
+                    result += r
+                    yield r
+                human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
+                                        generate_from="GameUser")
+                ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
+                                     generate_from="DEEP_AGENT")
+                messages = [human_message, ai_message]
+                await self.remember(messages, db_context)
+            except Exception as e:
+                logging.error(f"处理策略时发生错误: {e},使用fastchain重试")
                 async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
                                                   role_status=role_status,
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query,
                                                   llm=llm):
                     yield r
-            else:
-                # 异步生成结束后，检查result是否为有效的JSON
-                try:
-                    json_object = json.loads(result)
-                    tool_result = ""
-                    async for chunk in await self.use_tool_by_name(guid=guid,
-                                                                       user_name=user_name,
-                                                                       role_name=role_name,
-                                                                       role_status=role_status,
-                                                                       db_context=db_context,
-                                                                       action_name=function_name,
-                                                                       action_input=json_object
-                                                                       ):
-                        data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
-                        tool_result += chunk
-                        yield data_to_send
-                    human_message = Message(user_guid=guid, type="human", role=user_name, message=query,generate_from="GameUser")
-                    ai_message = Message(user_guid=guid, type="ai", role=role_name, message=tool_result,
-                                             generate_from=function_name,
-                                             call_step=json.dumps(json_object, ensure_ascii=False))
-                    last = [human_message, ai_message]
 
-                    await self.remember(db_context=db_context,messages=last)
-                    print("Result is valid JSON.")
-                except Exception as e  :
-                    logging.error(f"Result is not valid JSON.{e}...使用fastchain")
-                    async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
-                                                      role_status=role_status,
-                                                      user_name=user_name, role_name=role_name, guid=guid, query=query,
-                                                      llm=llm):
-                        yield r
+
+
+
+
+
+
+        # yield "dd"
+        # if avg_score < self.similarity_threshold:
+        #     print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
+        #     async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+        #                                       role_status=role_status,
+        #                                       user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
+        #         yield r
+        #
+        #
+        #     # logging.info(f"Agent Fast Chain Output: {results}")
+        #     # ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
+        #     #                      generate_from="快速回复",call_step=json.dumps(response_metadata))
+        #     # db_context.message_memory.add_message(ai_message)
+        #
+        # else:
+        #     print("Agent : 相似度分数高于阈值，使用DeepChain 进行回答")
+        #     system_prompt = self._generate_system_prompt(prompt_type=PromptType.DEEP_CHAT,db_context=db_context,role_status=role_status,user=user_name,char=role_name)
+        #     messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
+        #     # human_message = Message(user_guid=guid, type="human", role=user_name, message="外卖呢下雨没",
+        #     #                         generate_from="GameUser")
+        #     # db_context.message_memory.add_message(human_message)
+        #     # last_message = HumanMessage(content=query)
+        #     # messages.append(last_message)
+        #     human_message = HumanMessage(content=query)
+        #     messages.append(human_message)
+        #     # lm_with_tools = llm.bind(**llm_kwargs)
+        #     lm_with_tools = llm.bind_tools([
+        #         emotion_companion,
+        #         fact_conversion,
+        #         express_needs,
+        #         information_lookup,
+        #         opinion_evaluation,
+        #         defensive_dialogue,
+        #         repeat_expression
+        #     ])
+        #     print("message_memory:" + str(messages))
+        #     # messages.append(HumanMessage(content=query))
+        #     prompt = ChatPromptTemplate.from_messages(
+        #         [
+        #             ("system", system_prompt),
+        #             MessagesPlaceholder(variable_name="message"),
+        #         ]
+        #     )
+        #     result =""
+        #     function_name = ""
+        #     json_buff = ""
+        #     deep_chain = prompt | lm_with_tools
+        #     is_use_fast_chain = False
+        #     async for chunk in deep_chain.astream({"message": messages}):
+        #         print(chunk)
+        #         tool_calls = chunk.additional_kwargs.get('tool_calls')
+        #         chunk_content = chunk.content
+        #         # print("tool_calls:" + str(tool_calls))
+        #         if chunk_content == "" and tool_calls:
+        #             # tool_calls = chunk.additional_kwargs.get('tool_calls', [])
+        #             for call in tool_calls:
+        #                 function_data = call.get('function', {})
+        #                 # print("function_data:" + str(function_data))
+        #                 if function_data.get('name'):
+        #                     new_function_name = function_data.get('name')
+        #                     if len(new_function_name) <= 4:  # 检查新名称的长度是否小于等于4
+        #                         function_name += new_function_name  # 累加到现有的function_name
+        #                     else:
+        #                         function_name = new_function_name  # 直接替换现有的function_name
+        #                     # print("function_name:" + function_name)
+        #                 result += function_data.get('arguments', '')
+        #                 data_to_send = json.dumps({"action": function_name, "text": None}, ensure_ascii=False)
+        #                 yield data_to_send
+        #         else:
+        #             is_use_fast_chain=True
+        #             logging.info(f"Agent Deep Chain 生成策略异常,使用快速回复: {chunk.content}")
+        #             break
+        #     if is_use_fast_chain:
+        #         async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+        #                                           role_status=role_status,
+        #                                           user_name=user_name, role_name=role_name, guid=guid, query=query,
+        #                                           llm=llm):
+        #             yield r
+        #     else:
+        #         # 异步生成结束后，检查result是否为有效的JSON
+        #         try:
+        #             json_object = json.loads(result)
+        #             tool_result = ""
+        #             async for chunk in await self.use_tool_by_name(guid=guid,
+        #                                                                user_name=user_name,
+        #                                                                role_name=role_name,
+        #                                                                role_status=role_status,
+        #                                                                db_context=db_context,
+        #                                                                action_name=function_name,
+        #                                                                action_input=json_object
+        #                                                                ):
+        #                 data_to_send = json.dumps({"action": function_name, "text": chunk}, ensure_ascii=False)
+        #                 tool_result += chunk
+        #                 yield data_to_send
+        #             human_message = Message(user_guid=guid, type="human", role=user_name, message=query,generate_from="GameUser")
+        #             ai_message = Message(user_guid=guid, type="ai", role=role_name, message=tool_result,
+        #                                      generate_from=function_name,
+        #                                      call_step=json.dumps(json_object, ensure_ascii=False))
+        #             last = [human_message, ai_message]
+        #
+        #             await self.remember(db_context=db_context,messages=last)
+        #             print("Result is valid JSON.")
+        #         except Exception as e  :
+        #             logging.error(f"Result is not valid JSON.{e}...使用fastchain")
+        #             async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+        #                                               role_status=role_status,
+        #                                               user_name=user_name, role_name=role_name, guid=guid, query=query,
+        #                                               llm=llm):
+        #                 yield r
 
 
 

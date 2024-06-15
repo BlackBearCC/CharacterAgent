@@ -172,7 +172,6 @@ retriever = vectordb.as_retriever()
 
 
 
-
 tools = [
     EmotionCompanionTool(),  # 情感陪伴
     FactTransformTool(),  # 事实转换
