@@ -233,7 +233,7 @@ async def get_chat_qwen_turbo() -> BaseChatModel:
 async def get_chat_qwen_plus() -> BaseChatModel:
     return ChatTongyi(model_name="qwen-plus", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
 async def get_chat_qwen_max() -> BaseChatModel:
-    return ChatTongyi(model_name="qwen-max", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
+    return ChatTongyi(model_name="qwen-max", temperature=0.5, top_k=100, top_p=0.9,api_key = tongyi_api_key)
 
 async def get_ollama()->BaseChatModel:
     return ChatOllama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
@@ -324,7 +324,7 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
 
 
 async def chat_generator(uid: str, user_name: str, role_name: str, input_text: str, role_status: str,
-                        db_context: DBContext, llm: BaseChatModel,backup_llm:BaseChatModel) -> AsyncGenerator[str, None]:
+                        db_context: DBContext, llm,backup_llm) -> AsyncGenerator[str, None]:
     retries = 3
     delay = 1  # 初始重试延迟时间（秒）
     max_delay = 6  # 最大重试延迟时间（秒）
@@ -387,7 +387,7 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
     return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
 
 @app.post("/game/chat")
-async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm:BaseChatModel = Depends(get_chat_qwen_max),backup_llm:BaseChatModel = Depends(get_glm4)):
+async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_qwen_max_llm)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     try:

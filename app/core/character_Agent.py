@@ -108,16 +108,23 @@ class CharacterAgent(AbstractAgent):
         system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,
                                                      role_status=role_status, user=user_name, char=role_name)
         print(system_prompt)
-        # 获取消息历史
-        messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=20)
-        print(messages)
-        messages.append(HumanMessage(content=query))
+        system_prompt = system_prompt+"""\n### 对话记录
+                                        {conversation_massages}
 
-        # 构造聊天提示模板
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="message"),
-        ])
+                                        ### 用户：{user_input}
+                                        ### 回复："""
+        # # 获取消息历史
+        # messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=20)
+        messages = db_context.message_memory.buffer_messages(guid, count=12)
+        print(messages)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["conversation_massages","user_input"])
+        # messages.append(HumanMessage(content=query))
+
+        # # 构造聊天提示模板
+        # prompt = ChatPromptTemplate.from_messages([
+        #     ("system", system_prompt),
+        #     MessagesPlaceholder(variable_name="message"),
+        # ])
         output_parser = StrOutputParser()
         # 创建快速回复链
         fast_chain = prompt | llm |output_parser
@@ -126,7 +133,7 @@ class CharacterAgent(AbstractAgent):
         response_metadata = None
 
         # 异步流式处理回复
-        async for r in fast_chain.astream({"message": messages}):
+        async for r in fast_chain.astream({"conversation_massages": messages,"user_input": query}):
             results += r
             print(r)
             # response_metadata = r
@@ -440,7 +447,7 @@ class CharacterAgent(AbstractAgent):
             raise e
 
 
-    async def rute_retriever(self, guid:str,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm:BaseChatModel)->AsyncGenerator[str, None]:
+    async def rute_retriever(self, guid:str,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
         docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
         # print(docs_and_scores)
@@ -863,7 +870,7 @@ class CharacterAgent(AbstractAgent):
         else:
             logging.info("Agent 实体更新记忆: 跳过")
 
-    async def response(self, guid:str ,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm:BaseChatModel) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm) -> AsyncGenerator[str, None]:
 
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
