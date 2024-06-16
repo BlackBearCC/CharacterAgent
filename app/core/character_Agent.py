@@ -619,13 +619,14 @@ class CharacterAgent(AbstractAgent):
             logging.error(f"Unexpected error occurred: {e}")
             raise e
     @staticmethod
-    async def conversation_rute( role_info,intent_analysis, input_text,match_kg,llm):
+    async def conversation_rute( role_info,intent_analysis, input_text,context,match_kg,llm):
         logging.info("Agent : 对话模式匹配...")
         system_prompt = DEEP_FAST_RUTE.format(
             role_info=role_info,
             user_input=input_text,
             intent_analysis=intent_analysis,
-            match_kg=match_kg
+            match_kg=match_kg,
+            context=context,
         )
         # print(system_prompt)
         prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
@@ -685,7 +686,7 @@ class CharacterAgent(AbstractAgent):
         tllm = Tongyi(model_name="qwen-turbo", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
         intent = await self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm)
-        conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,match_kg=combined_content,llm=tllm)
+        conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,context=history,match_kg=combined_content,llm=tllm)
         if "快速回复" in conversational:
             async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,match_kg=combined_content,
                                                   role_status=role_status,
