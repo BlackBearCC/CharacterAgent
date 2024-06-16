@@ -692,7 +692,25 @@ class CharacterAgent(AbstractAgent):
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
                     yield r
         else:
-            action = intent
+            intent_mapping = {
+                "表达诉求": "表达诉求",
+                "观点评价": "观点评价",
+                "重复表达": "重复表达",
+                "现实实体查询": "事实转换",
+                "攻击角色": "防御对话",
+                "情感陪伴": "情感陪伴",
+                "信息查找": "信息查找",
+                "闲聊": "深度回复",  # 添加对'闲聊'的处理
+            }
+
+            # 根据intent获取对应的action
+            if intent in intent_mapping:
+                action = intent_mapping[intent]
+            else:
+                # 如果intent没有匹配到预定义的值，可以设定一个默认行为或者抛出错误等
+                action = "深度回复"  # 示例默认值，根据实际情况调整
+
+
             data_to_flag = json.dumps({"action": action, "text": None}, ensure_ascii=False)
             yield data_to_flag
             tasks = {
