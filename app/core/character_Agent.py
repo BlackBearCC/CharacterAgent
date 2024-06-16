@@ -20,7 +20,8 @@ from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_agent import DEEP_INTENT, DEEP_EMOTION, DEEP_CONTEXT, DEEP_CHOICE, DEEP_OUTPUT, \
     DEEP_STRATEGY_ENTITY_TRANSFER, DEEP_STRATEGY_CONTEXT_KEY, DEEP_STRATEGY_USER_ENTITY, DEEP_FAST_RUTE, \
-    DEEP_STRATEGY_HOLD_ATTENTION, DEEP_STRATEGY_ROLE_TRAIT
+    DEEP_STRATEGY_HOLD_ATTENTION, DEEP_STRATEGY_ROLE_TRAIT, DEEP_STRATEGY_HOLD_ROLE, DEEP_STRATEGY_SWITCH_TOPIC, \
+    DEEP_STRATEGY_CARE, DEEP_STRATEGY_EMOTION
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
@@ -108,7 +109,7 @@ class CharacterAgent(AbstractAgent):
         # 生成系统提示并替换特定标记
         system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,
                                                      role_status=role_status, user=user_name, char=role_name)
-        print(system_prompt)
+        # print(system_prompt)
         system_prompt = system_prompt+"""
         ### 经典桥段：
         {classic_scenes}
@@ -119,8 +120,8 @@ class CharacterAgent(AbstractAgent):
         """
         # # 获取消息历史
         # messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=20)
-        messages = db_context.message_memory.buffer_messages(guid, count=12)
-        print(messages)
+        messages = db_context.message_memory.buffer_messages(guid, count=15)
+        # print(messages)
         prompt = PromptTemplate(template=system_prompt, input_variables=["classic_scenes","conversation_massages","user_input"])
         # messages.append(HumanMessage(content=query))
 
@@ -280,7 +281,7 @@ class CharacterAgent(AbstractAgent):
         emotion_interpretation = result_dict.get('emotion', '无情绪信息')
         contextual_understanding = result_dict.get('context', '无上下文信息')
         chosen_strategies = result_dict.get('chosen_strategies', '无选择策略信息')
-        strategy_result = result_dict.get('strategy_result', '无策略结果信息')
+        strategy_result = result_dict.get('strategy_result', '无策略因子结果信息')
         role_chat_style = result_dict.get('role_chat_style', '活泼')
         llm =Tongyi(model_name="qwen-max",dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         system_prompt = DEEP_OUTPUT.format(
@@ -311,7 +312,8 @@ class CharacterAgent(AbstractAgent):
 
         except RateLimitError:
             logging.error("Rate limit reached, retrying...")
-
+            llm = Tongyi(model_name="qwen-plus", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
+            chain = prompt | llm | output_parser
             async for chunk in chain.astream({"user_input": input_text}):
                 data_to_send = json.dumps({"action": action, "text": chunk}, ensure_ascii=False)
                 result+=chunk
@@ -333,8 +335,8 @@ class CharacterAgent(AbstractAgent):
     @staticmethod
     async def handle_context_memory(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
         """处理上下文记忆的逻辑"""
-        logging.info("上下文记忆回复执行...")
-        conversation_history = db_context.message_memory.buffer_messages(uid, count=50)
+        logging.info("Agent : 上下文记忆因子生成中...")
+        conversation_history = db_context.message_memory.buffer_messages(uid, count=10)
         summary = db_context.message_summary.buffer_summaries(uid, max_count=20)
         contextual_analysis=result_dict.get('context', '无上下文信息')
         system_prompt = DEEP_STRATEGY_CONTEXT_KEY.format(
@@ -352,13 +354,13 @@ class CharacterAgent(AbstractAgent):
 
         try:
             response = await chain.ainvoke({"user_input": input_text})
-            logging.info(f"Agent_上下文记忆回复输出: {response}")
+            logging.info(f"Agent : 上下文记忆因子生成中: {response}")
 
             return response
         except RateLimitError:
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
-            print(f"Agent_上下文记忆回复输出: {response}")
+            print(f"Agent : 上下文记忆因子生成中: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
@@ -367,7 +369,7 @@ class CharacterAgent(AbstractAgent):
     @staticmethod
     async def handle_user_profile(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
         """处理用户画像回复的逻辑"""
-        logging.info("Agent : 用户实体回复执行...")
+        logging.info("Agent : 用户实体因子生成中...")
         user_entity = data_dict.get('user_entity', '无用户实体信息')
         system_prompt = DEEP_STRATEGY_USER_ENTITY.format(
             role_info=role_info,
@@ -381,13 +383,13 @@ class CharacterAgent(AbstractAgent):
 
         try:
             response = await chain.ainvoke({"user_input": input_text})
-            logging.info(f"Agent_用户实体回复输出: {response}")
+            logging.info(f"Agent : 用户实体因子生成中: {response}")
 
             return response
         except RateLimitError:
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
-            print(f"Agent_用户实体回复输出: {response}")
+            print(f"Agent : 用户实体因子生成中: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
@@ -396,7 +398,7 @@ class CharacterAgent(AbstractAgent):
 
     @staticmethod
     async def handle_entity_transfer(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
-        logging.info("Agent : 实体转换策略执行...")
+        logging.info("Agent : 实体转换因子生成中...")
         system_prompt = DEEP_STRATEGY_ENTITY_TRANSFER.format(
             role_info=role_info,
             user_input=input_text,
@@ -410,13 +412,13 @@ class CharacterAgent(AbstractAgent):
 
         try:
             response = await chain.ainvoke({"user_input": input_text})
-            logging.info(f"Agent_实体转换输出: {response}")
+            logging.info(f"Agent : 实体转换因子生成中: {response}")
 
             return response
         except RateLimitError:
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
-            print(f"Agent_实体转换输出: {response}")
+            print(f"Agent : 实体转换因子生成中: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
@@ -424,7 +426,7 @@ class CharacterAgent(AbstractAgent):
 
     @staticmethod
     async def handle_sustained_attention(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
-        logging.info("Agent : 持续关注策略执行...")
+        logging.info("Agent : 持续关注因子生成中...")
         # summary = db_context.message_summary.buffer_summaries(uid, max_count=10)
         context = result_dict.get('context', '无上下文信息')
         emotion = result_dict.get('emotion', '无情感信息')
@@ -444,13 +446,13 @@ class CharacterAgent(AbstractAgent):
 
         try:
             response = await chain.ainvoke({"user_input": input_text})
-            logging.info(f"Agent_持续关注输出: {response}")
+            logging.info(f"Agent : 持续关注因子生成中: {response}")
 
             return response
         except RateLimitError:
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
-            print(f"Agent_持续关注输出: {response}")
+            print(f"Agent : 持续关注因子生成中: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
@@ -458,7 +460,7 @@ class CharacterAgent(AbstractAgent):
 
     @staticmethod
     async def handle_role_trait_response(role_info, db_context, uid, input_text, result_dict, data_dict,llm):
-        logging.info("Agent : 角色特质执行...")
+        logging.info("Agent : 角色特质因子生成中...")
         role_status=data_dict.get('role_status', '无角色状态信息')
         system_prompt = DEEP_STRATEGY_ROLE_TRAIT.format(
             role_info=role_info,
@@ -473,18 +475,147 @@ class CharacterAgent(AbstractAgent):
 
         try:
             response = await chain.ainvoke({"user_input": input_text})
-            logging.info(f"Agent_角色特质输出: {response}")
+            logging.info(f"Agent ：角色特质因子: {response}")
 
             return response
         except RateLimitError:
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
-            print(f"Agent_角色特质输出: {response}")
+            print(f"Agent ：角色特质因子: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
             raise e
 
+    @staticmethod
+    async def handle_maintain_role(role_info, db_context, uid, input_text, result_dict, data_dict,llm):
+        logging.info("Agent : 保持角色因子生成中...")
+        role_status=data_dict.get('role_status', '无角色状态信息')
+        system_prompt = DEEP_STRATEGY_HOLD_ROLE.format(
+            role_info=role_info,
+            user_input=input_text,
+            role_status=role_status,
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent : 保持角色因子生成: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent : 保持角色因子生成: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    @staticmethod
+    async def handle_topic_switch(role_info, db_context, uid, input_text, result_dict, data_dict,llm):
+        logging.info("Agent : 切换话题因子生成中...")
+        role_status=data_dict.get('role_status', '无')
+        user_entity = data_dict.get('user_entity', '无')
+        context = result_dict.get('context', '无息')
+        role_opinion = data_dict.get('role_opinion', '无')
+        system_prompt = DEEP_STRATEGY_SWITCH_TOPIC.format(
+            role_info=role_info,
+            user_input=input_text,
+            role_status=role_status,
+            user_entity = user_entity,
+            context = context,
+            role_opinion = role_opinion,
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent : 切换话题因子生成: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent : 切换话题因子生成: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+
+    @staticmethod
+    async def handle_greetings_and_care(role_info, db_context, uid, input_text, result_dict, data_dict,llm):
+        logging.info("Agent : 关心问候因子生成中...")
+        user_entity = data_dict.get('user_entity', '无')
+        context = result_dict.get('context', '无息')
+
+        system_prompt = DEEP_STRATEGY_CARE.format(
+            role_info=role_info,
+            user_input=input_text,
+            user_entity = user_entity,
+            context = context,
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent : 关心问候因子生成: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent : 关心问候因子生成: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    @staticmethod
+    async def handle_emotional_engagement(role_info, db_context, uid, input_text, result_dict, data_dict,llm):
+        logging.info("Agent : 情感共情因子生成中...")
+        user_entity = data_dict.get('user_entity', '无')
+        context = result_dict.get('context', '无')
+        user_emotion = data_dict.get('user_emotion', '无')
+        system_prompt = DEEP_STRATEGY_EMOTION.format(
+            role_info=role_info,
+            user_input=input_text,
+            user_entity = user_entity,
+            context = context,
+            user_emotion = user_emotion,
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent : 情感共情因子生成: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent : 情感共情因子生成: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
     @staticmethod
     async def conversation_rute( role_info,intent_analysis, input_text,match_kg,llm):
         logging.info("Agent : 对话模式匹配...")
@@ -578,12 +709,12 @@ class CharacterAgent(AbstractAgent):
             KEYWORD_HANDLERS = {
                 "上下文记忆": self.handle_context_memory,
                 "用户实体": self.handle_user_profile,
-                # "情感共情": self.handle_emotional_engagement,
+                "情感共情": self.handle_emotional_engagement,
                 "持续关注": self.handle_sustained_attention,
                 "自我特质": self.handle_role_trait_response,
-                # "问候和关心": self.handle_greetings_and_care,
-                # "切换话题": self.handle_topic_switch,
-                # "保持角色": self.handle_maintain_role,
+                "问候和关心": self.handle_greetings_and_care,
+                "切换话题": self.handle_topic_switch,
+                "保持角色": self.handle_maintain_role,
                 "实体转换": self.handle_entity_transfer,
             }
             result_dict['intent'] = intent
@@ -612,7 +743,7 @@ class CharacterAgent(AbstractAgent):
                     if isinstance(result, Exception):
                         logging.warning(f"处理策略 '{keyword}' 时发生错误: {result}")
                     else:
-                        strategy_result_value += f"{keyword}: {result}\n"  # 使用换行符分隔每个结果
+                        strategy_result_value += f"{keyword}因子: {result}\n"  # 使用换行符分隔每个结果
                         result_dict['strategy_result'] = strategy_result_value
 
             else:
