@@ -20,7 +20,7 @@ from ai.models.buffer import get_prefixed_buffer_string
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_agent import DEEP_INTENT, DEEP_EMOTION, DEEP_CONTEXT, DEEP_CHOICE, DEEP_OUTPUT, \
     DEEP_STRATEGY_ENTITY_TRANSFER, DEEP_STRATEGY_CONTEXT_KEY, DEEP_STRATEGY_USER_ENTITY, DEEP_FAST_RUTE, \
-    DEEP_STRATEGY_HOLD_ATTENTION
+    DEEP_STRATEGY_HOLD_ATTENTION, DEEP_STRATEGY_ROLE_TRAIT
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
@@ -331,7 +331,7 @@ class CharacterAgent(AbstractAgent):
 
 
     @staticmethod
-    async def handle_context_memory(role_info,db_context, uid, input_text, result_dict, llm):
+    async def handle_context_memory(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
         """处理上下文记忆的逻辑"""
         logging.info("上下文记忆回复执行...")
         conversation_history = db_context.message_memory.buffer_messages(uid, count=50)
@@ -365,10 +365,10 @@ class CharacterAgent(AbstractAgent):
             raise e
 
     @staticmethod
-    async def handle_user_profile(role_info,db_context, uid, input_text, result_dict, llm):
+    async def handle_user_profile(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
         """处理用户画像回复的逻辑"""
         logging.info("Agent : 用户实体回复执行...")
-        user_entity = db_context.entity_memory.get_entity(uid)
+        user_entity = data_dict.get('user_entity', '无用户实体信息')
         system_prompt = DEEP_STRATEGY_USER_ENTITY.format(
             role_info=role_info,
             user_input=input_text,
@@ -395,9 +395,8 @@ class CharacterAgent(AbstractAgent):
 
 
     @staticmethod
-    async def handle_entity_transfer(role_info,db_context, uid, input_text, result_dict, llm):
+    async def handle_entity_transfer(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
         logging.info("Agent : 实体转换策略执行...")
-        summary = db_context.message_summary.buffer_summaries(uid, max_count=10)
         system_prompt = DEEP_STRATEGY_ENTITY_TRANSFER.format(
             role_info=role_info,
             user_input=input_text,
@@ -424,7 +423,7 @@ class CharacterAgent(AbstractAgent):
             raise e
 
     @staticmethod
-    async def handle_sustained_attention(role_info,db_context, uid, input_text, result_dict, llm):
+    async def handle_sustained_attention(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
         logging.info("Agent : 持续关注策略执行...")
         # summary = db_context.message_summary.buffer_summaries(uid, max_count=10)
         context = result_dict.get('context', '无上下文信息')
@@ -452,6 +451,35 @@ class CharacterAgent(AbstractAgent):
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
             print(f"Agent_持续关注输出: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    @staticmethod
+    async def handle_role_trait_response(role_info, db_context, uid, input_text, result_dict, data_dict,llm):
+        logging.info("Agent : 角色特质执行...")
+        role_status=data_dict.get('role_status', '无角色状态信息')
+        system_prompt = DEEP_STRATEGY_ROLE_TRAIT.format(
+            role_info=role_info,
+            user_input=input_text,
+            role_status=role_status,
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_角色特质输出: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_角色特质输出: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
@@ -507,9 +535,18 @@ class CharacterAgent(AbstractAgent):
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         # role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
         history = db_context.message_memory.buffer_messages(guid,user_name,role_name, 10)
-        data_to_send = json.dumps({"action": None, "text": None})
+        # data_to_send = json.dumps({"action": None, "text": None})
         # print("message_memory:"+history)
-
+        summary = db_context.message_summary.buffer_summaries(guid, 10)
+        data_dict = {
+            "user_name": user_name,
+            "role_name": role_name,
+            "role_status":role_status,
+            "user_entity": entity.entity,
+            "history": history,
+            "opinion": opinion_memory.buffer(guid, 3),
+            "summary":summary
+        }
 
         ollm = Tongyi(model_name="qwen-plus", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         tllm = Tongyi(model_name="qwen-turbo", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
@@ -543,7 +580,7 @@ class CharacterAgent(AbstractAgent):
                 "用户实体": self.handle_user_profile,
                 # "情感共情": self.handle_emotional_engagement,
                 "持续关注": self.handle_sustained_attention,
-                # "自我特质": self.handle_role_trait_response,
+                "自我特质": self.handle_role_trait_response,
                 # "问候和关心": self.handle_greetings_and_care,
                 # "切换话题": self.handle_topic_switch,
                 # "保持角色": self.handle_maintain_role,
@@ -561,7 +598,7 @@ class CharacterAgent(AbstractAgent):
                 tasks = {
                     keyword: (KEYWORD_HANDLERS[keyword],
                               {'role_info': self.base_info, 'db_context': db_context, 'uid': guid, 'input_text': query,
-                               'result_dict': result_dict,
+                               'result_dict': result_dict,'data_dict':data_dict,
                                'llm': ollm})
                     for keyword in matched_keywords
                 }
