@@ -4,7 +4,9 @@ import json
 from enum import Enum
 from typing import Any, Dict, List, AsyncGenerator
 
+import aiohttp
 from langchain_community.llms.tongyi import Tongyi
+from langchain_community.vectorstores import Milvus
 from langchain_core.language_models import BaseLLM, BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, BaseMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -21,7 +23,7 @@ from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_agent import DEEP_INTENT, DEEP_EMOTION, DEEP_CONTEXT, DEEP_CHOICE, DEEP_OUTPUT, \
     DEEP_STRATEGY_ENTITY_TRANSFER, DEEP_STRATEGY_CONTEXT_KEY, DEEP_STRATEGY_USER_ENTITY, DEEP_FAST_RUTE, \
     DEEP_STRATEGY_HOLD_ATTENTION, DEEP_STRATEGY_ROLE_TRAIT, DEEP_STRATEGY_HOLD_ROLE, DEEP_STRATEGY_SWITCH_TOPIC, \
-    DEEP_STRATEGY_CARE, DEEP_STRATEGY_EMOTION
+    DEEP_STRATEGY_CARE, DEEP_STRATEGY_EMOTION, DEEP_STRATEGY_SEARCH
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
@@ -91,8 +93,8 @@ class CharacterAgent(AbstractAgent):
 
         self.user_input = ""
 
-    async def response_fast(self, prompt_type: PromptType, db_context: DBContext,match_kg, role_status, user_name, role_name, guid, query,
-                            llm,remember:bool=True)->AsyncGenerator:
+    async def response_fast(self,  db_context: DBContext, role_status, user_name, role_name, guid, query,data_dict,
+                            llm,remember:bool=True,match_kg="无",prompt_type: PromptType=PromptType.FAST_CHAT)->AsyncGenerator:
         """
         异步生成并流式返回快速聊天的响应。
 
@@ -106,8 +108,9 @@ class CharacterAgent(AbstractAgent):
         - query: 用户的查询内容。
         - llm: 大型语言模型实例，用于生成回复。
         """
+
         # 生成系统提示并替换特定标记
-        system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,
+        system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,data_dict=data_dict,
                                                      role_status=role_status, user=user_name, char=role_name)
         # print(system_prompt)
         system_prompt = system_prompt+"""
@@ -283,6 +286,7 @@ class CharacterAgent(AbstractAgent):
         chosen_strategies = result_dict.get('chosen_strategies', '无选择策略信息')
         strategy_result = result_dict.get('strategy_result', '无策略因子结果信息')
         role_chat_style = result_dict.get('role_chat_style', '活泼')
+        environment = result_dict.get('environment', '无环境信息')
         history = data_dict.get('history', ''),
         llm =Tongyi(model_name="qwen-max",dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         system_prompt = DEEP_OUTPUT.format(
@@ -293,6 +297,7 @@ class CharacterAgent(AbstractAgent):
             role_info = self.base_info+"\n角色语言示例："+role_chat_style,
             history=history,
             role_status=role_status,
+            environment = environment,
             chosen_strategies=chosen_strategies,
             strategy_result=strategy_result
         )
@@ -341,12 +346,14 @@ class CharacterAgent(AbstractAgent):
         conversation_history = db_context.message_memory.buffer_messages(uid, count=10)
         summary = db_context.message_summary.buffer_summaries(uid, max_count=20)
         contextual_analysis=result_dict.get('context', '无上下文信息')
+        environment = result_dict.get('environment', '无环境信息')
         system_prompt = DEEP_STRATEGY_CONTEXT_KEY.format(
             role_info=role_info,
             user_input=input_text,
             contextual_analysis=contextual_analysis,
             conversation_history=conversation_history,
             summary=summary,
+            environment=environment,
         )
         # print(system_prompt)
         prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
@@ -421,6 +428,53 @@ class CharacterAgent(AbstractAgent):
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
             print(f"Agent : 实体转换因子生成中: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+    @staticmethod
+    async def handle_information_search(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
+        logging.info("Agent : 信息提供因子生成中...")
+
+        information = f"环境信息：+{data_dict.get('environment', '无')}"
+        # print(information)
+        async with aiohttp.ClientSession() as session:
+            # 发送HTTP POST请求
+            async with session.post("http://101.43.31.140:12000/api/box_foods",
+                                    json={"guid": "bkuslqpmpe"}) as resp:
+                if resp.status == 200:
+                    response_content = await resp.json()
+                    logging.info(f"Agent : 冰箱数据获取: {response_content}")
+                    # 获取数据
+                    data_list = response_content["data"]
+                    data_dicts = [item for item in data_list]  # 将数据转化为字典列表
+                    # 拼接字符串
+                    data_pairs = ["冰箱数据："]
+                    for data_dict in data_dicts:
+                        for key, value in data_dict.items():
+                            data_pairs.append(f"{key}={value}")
+        information += " ".join(data_pairs)
+        print(information)
+        system_prompt = DEEP_STRATEGY_SEARCH.format(
+            role_info=role_info,
+            user_input=input_text,
+            information =information
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent : 信息提供因子生成中: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent : 信息提供因子生成中: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
@@ -646,25 +700,38 @@ class CharacterAgent(AbstractAgent):
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
-            raise e
+            return "快速回复"
 
 
-    async def rute_retriever(self, guid:str,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm)->AsyncGenerator[str, None]:
+    async def rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
-        docs_and_scores = self.vector_db.similarity_search_with_score(query=query, k=3)
-        # print(docs_and_scores)
-        scores = [score for _, score in docs_and_scores]
-        documents = [doc for doc, _ in docs_and_scores]
-        # print("文档列表:", documents)
-        combined_content = ''.join(doc.page_content for doc in documents)
-        combined_content = combined_content.replace("{user}", user_name).replace("{char}", role_name)
+        combined_content = ''
+        environment_content =""
+        try:
+            documents = vector_db.similarity_search( query=query, k=5,expr="namespace == 'normal'")
+            combined_content = ''.join(doc.page_content for doc in documents)
+            combined_content = combined_content.replace("{user}", user_name).replace("{char}", role_name)
+        except Exception as e:
+            combined_content ="无"
+        try:
+            environment_kg = vector_db.similarity_search(query=query, k=2,expr="namespace == 'environment'")
+            # print("环境知识:", environment_kg)
+            environment_content = ''.join(env.page_content for env in environment_kg)
+            environment_content = environment_content.replace("{user}", user_name).replace("{char}", role_name)
+            # print("环境知识:", environment_kg)
+        except Exception as e:
+            environment_content = "无"
+
+
+
+
         # print("文档内容:", combined_content)
-        avg_score = sum(scores) / len(scores) if scores else 0
-        print("平均相似度分数:", avg_score)
+        # avg_score = sum(scores) / len(scores) if scores else 0
+        # print("平均相似度分数:", avg_score)
         entity = db_context.entity_memory.get_entity(guid)
         if entity is None:
             entity = Entity(entity="", summary="")
-        print("实体："+entity.entity)
+        # print("实体："+entity.entity)
         opinion_memory = OpinionMemory(
             connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
         # role_state = "('体力':'饥饿','精力':'疲劳','位置':'房间，沙发上','动作':'坐着')"
@@ -679,9 +746,9 @@ class CharacterAgent(AbstractAgent):
             "user_entity": entity.entity,
             "history": history,
             "opinion": opinion_memory.buffer(guid, 3),
-            "summary":summary
+            "summary":summary,
+            "environment":environment_content,
         }
-
         ollm = Tongyi(model_name="qwen-plus", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         tllm = Tongyi(model_name="qwen-turbo", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
@@ -689,7 +756,7 @@ class CharacterAgent(AbstractAgent):
         conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,context=history,match_kg=combined_content,llm=tllm)
         if "快速回复" in conversational:
             async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,match_kg=combined_content,
-                                                  role_status=role_status,
+                                                  role_status=role_status,data_dict=data_dict,
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
                     yield r
         else:
@@ -724,7 +791,7 @@ class CharacterAgent(AbstractAgent):
             for key, result in zip(tasks.keys(), results):
                 # 如果有任务抛出异常，这里会捕获异常而不是直接中断程序
                 if isinstance(result, Exception):
-                    result_dict[key] = f"Error: {result}"
+                    result_dict[key] = f"无"
                 else:
                     result_dict[key] = result
             KEYWORD_HANDLERS = {
@@ -737,6 +804,7 @@ class CharacterAgent(AbstractAgent):
                 "切换话题": self.handle_topic_switch,
                 "保持角色": self.handle_maintain_role,
                 "实体转换": self.handle_entity_transfer,
+                "信息提供": self.handle_information_search,
             }
             result_dict['intent'] = intent
             deep_choice_result = await self.agent_deep_choice(db_context=db_context, uid=guid, input_text=query,
@@ -782,7 +850,7 @@ class CharacterAgent(AbstractAgent):
             except Exception as e:
                 logging.error(f"处理策略时发生错误: {e},使用fastchain重试")
                 async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
-                                                  role_status=role_status,
+                                                  role_status=role_status,data_dict=data_dict,
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query,
                                                   llm=llm,match_kg=combined_content):
                     yield r
@@ -1077,7 +1145,7 @@ class CharacterAgent(AbstractAgent):
         logging.info("Agent Use Chain: %s", action_name)
         return await self.use_tool_by_name(guid=guid,user_name=user_name,role_name=role_name,action_name=action_name, action_input=action_input,role_status=role_status,db_context=db_context)
     async def memory_entity(self,guid,user_name,role_name,message_threshold,db_context:DBContext):
-        message_content, message_ids = db_context.message_memory.check_and_buffer_messages(guid, user_name,
+        message_content, message_ids =await db_context.message_memory.check_and_buffer_messages(guid, user_name,
                                                                                                  role_name,
                                                                                                  message_threshold)
         if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
@@ -1102,7 +1170,7 @@ class CharacterAgent(AbstractAgent):
         else:
             logging.info("Agent 实体更新记忆: 跳过")
 
-    async def response(self, guid:str ,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,vector_db,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm) -> AsyncGenerator[str, None]:
 
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
@@ -1110,7 +1178,7 @@ class CharacterAgent(AbstractAgent):
         # human_message = Message(user_guid=guid, type="human", role=user_name, message=input_text,generate_from="GameUser")
         # logging.info(f"{guid},User Input: {input_text}")  # 记录用户输入的日志
         # db_context.message_memory.add_message(human_message)
-        async for chunk in self.rute_retriever(guid=guid,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm):
+        async for chunk in self.rute_retriever(guid=guid,vector_db=vector_db,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm):
             yield chunk
         asyncio.create_task(self.memory_summary(guid=guid,user_name=user_name,role_name=role_name,message_threshold=10,db_context=db_context))
         asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))
@@ -1210,7 +1278,7 @@ class CharacterAgent(AbstractAgent):
                                                         generate_from="WriteDiary"))
 
 
-    def _generate_system_prompt(self,prompt_type: PromptType,db_context:DBContext,guid:str=None,role=None,role_status=None, user=None,char=None,date_start=None,date_end=None):
+    def _generate_system_prompt(self,prompt_type: PromptType,db_context:DBContext,data_dict,guid:str=None,role=None,role_status=None, user=None,char=None,date_start=None,date_end=None):
         if prompt_type == PromptType.EVENT:
             recent_event =db_context.message_summary.buffer_summaries(guid,20)
             system_prompt = EVENT_PROMPT.format(
@@ -1240,7 +1308,7 @@ class CharacterAgent(AbstractAgent):
                 user=user,
                 char=char,
                 memory_of_user=db_context.entity_memory.get_entity(guid),
-                environment="",
+                environment=data_dict.get("environment","无"),
                 recent_event=db_context.message_summary.buffer_summaries(guid, 20),
                 opinion=opinion_memory.buffer(guid, 10),
             )
@@ -1367,7 +1435,7 @@ class CharacterAgent(AbstractAgent):
             # db_context.message_summary.add_summary(message_summary=summary)
 
         else:
-            message_content, message_ids =  db_context.message_memory.check_and_buffer_messages(guid, user_name,
+            message_content, message_ids = await db_context.message_memory.check_and_buffer_messages(guid, user_name,
                                                                                                      role_name,
                                                                                                      message_threshold)
             if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:

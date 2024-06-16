@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 from typing import AsyncContextManager, AsyncGenerator
 
 import httpx
+import langchain
 import pytz
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -39,7 +40,7 @@ from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
 from app.api.models import ChatRequest, WriteDiary, EventRequest, GameUser, RoleLog, GameUser, GenerateSound
 from app.core import CharacterAgent
-from langchain_community.document_loaders import DirectoryLoader
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
 
 from app.core.tools.dialogue_tool import EmotionCompanionTool, FactTransformTool, ExpressionTool, InformationTool, \
     OpinionTool, DefenseTool, RepeatTool, Memory_SearchTool
@@ -118,10 +119,28 @@ file_path = "ai/knowledge/conversation_sample"
 loader = DirectoryLoader(file_path, glob="**/*.txt", show_progress=True,
                                  use_multithreading=True)
 documents = loader.load()
-
 # 分割文档为片段
 text_splitter = CharacterTextSplitter(chunk_size=100, chunk_overlap=20)
 docs = text_splitter.split_documents(documents)
+# 添加 "collection_name" 标识到元数据
+for doc in docs:
+    doc.metadata["namespace"] = "normal"
+
+env_file_path = "ai/knowledge/env"
+loader2 = DirectoryLoader(env_file_path, glob="**/*.txt", show_progress=True,
+                                 use_multithreading=True)
+env_documents = loader2.load()
+text_splitter2 = CharacterTextSplitter(chunk_size=50, chunk_overlap=10)
+
+# text_loader = TextLoader("ai/knowledge/environment_kg.txt",encoding="utf-8")
+# environment_kg  = text_loader.load()
+env_kg = text_splitter2.split_documents(env_documents)
+
+# 添加 "collection_name" 标识到环境知识文档的元数据
+for doc in env_kg:
+    doc.metadata["namespace"] = "environment"
+
+# print(env_kg)
 
 # embedding_model = "thenlper/gte-small-zh"
 # embedding_model = "iic/nlp_gte_sentence-embedding_chinese-small"
@@ -143,8 +162,20 @@ vectordb = Milvus.from_documents(
     embeddings,
     collection_name="normal_chat",
     connection_args={"host": "182.254.242.30", "port": "19530"},
+    partition_key_field="namespace"
 
 )
+
+vector_db = Milvus.from_documents(
+    env_kg,
+    embeddings,
+    collection_name="environment_kg",
+    connection_args={"host": "182.254.242.30", "port": "19530"},
+    partition_key_field="namespace"
+)
+
+# documents = vector_db.similarity_search(query="房间", k=5, expr="namespace == 'environment'")
+# print(documents)
 # vectordb = Milvus(
 #     embedding_function=embeddings,
 #     collection_name="my_collection",
@@ -324,7 +355,7 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
 
 
 async def chat_generator(uid: str, user_name: str, role_name: str, input_text: str, role_status: str,
-                        db_context: DBContext, llm,backup_llm) -> AsyncGenerator[str, None]:
+                        db_context: DBContext,vector_db:Milvus, llm,backup_llm) -> AsyncGenerator[str, None]:
     retries = 3
     delay = 1  # 初始重试延迟时间（秒）
     max_delay = 6  # 最大重试延迟时间（秒）
@@ -337,7 +368,7 @@ async def chat_generator(uid: str, user_name: str, role_name: str, input_text: s
 
         try:
             async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
-                                                            input_text=input_text, role_status=role_status,
+                                                            input_text=input_text, role_status=role_status,vector_db=vector_db,
                                                             db_context=db_context, llm=current_llm):
                 yield response_chunk
 
@@ -360,11 +391,21 @@ async def chat_generator(uid: str, user_name: str, role_name: str, input_text: s
             delay = min(delay * 2, max_delay)
         finally:
             if retries == 0:
-                logging.error(f"所有重试均失败，不再尝试。uid: {uid}, user_name: {user_name}, role_name: {role_name}")
-                async for r in tuji_agent.balderdash(user_name, role_name, role_status, uid, str(errors), input_text, db_context):
-                    data_to_send = json.dumps({"action": "胡言乱语", "text": r}, ensure_ascii=False)
-                    yield data_to_send
-
+                logging.error(f"最后一次重试失败，将使用备份LLM重试。uid: {uid}, user_name: {user_name}, role_name: {role_name}")
+                try:
+                    async for response_chunk in tuji_agent.response_fast(guid=uid, user_name=user_name,
+                                                                         role_name=role_name, query=input_text,
+                                                                         role_status=role_status, data_dict={},
+                                                                         db_context=db_context, llm=current_llm
+                                                                         ):
+                        yield response_chunk
+                except Exception as e:
+                        logging.error(
+                            f"所有重试均失败，不再尝试。uid: {uid}, user_name: {user_name}, role_name: {role_name}")
+                        async for r in tuji_agent.balderdash(user_name, role_name, role_status, uid, str(errors),
+                                                             input_text, db_context):
+                            data_to_send = json.dumps({"action": "胡言乱语", "text": r}, ensure_ascii=False)
+                            yield data_to_send
 
     # except ValueError as ve:
     #     logging.error(f"生成聊天响应时出现Value错误: {ve}")
@@ -387,7 +428,7 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
     return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
 
 @app.post("/game/chat")
-async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_qwen_max_llm)):
+async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_chat_qwen_plus)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     try:
@@ -401,7 +442,7 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
         role_status = request.role_status
 
         generator = chat_generator(uid, user_name, role_name, request.input, role_status=role_status,
-                                   llm=llm,backup_llm=backup_llm,
+                                   llm=llm,backup_llm=backup_llm,vector_db=vector_db,
                                              db_context=db_context)
         return EventSourceResponse(generator)
 

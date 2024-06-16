@@ -77,7 +77,7 @@ class MessageMemory:
     #     # 这是一个示例格式化函数，具体实现可能根据你的需求有所不同
     #     return f"{message.created_at.strftime('%Y-%m-%d %H:%M:%S')} - [{role_name} ({user_name})]: {message.message}"
 
-    def check_and_buffer_messages(self, guid: str, user_name: str, role_name: str, threshold: int = 10,
+    async def check_and_buffer_messages(self, guid: str, user_name: str, role_name: str, threshold: int = 10,
                                         start_date=None, end_date=None) -> Tuple[str, List[int]]:
         """
         检查用户的消息数量，如果达到或超过指定阈值，则返回缓冲的消息内容及消息ID列表。
