@@ -128,5 +128,7 @@ class MessageMemory:
             return f"{message.created_at}, {role_name}: {cleaned_message}"
         elif message.type == "system":
             return f"<SYSTEM> :{message.created_at}\n{cleaned_message}</SYSTEM>"
+        elif message.type == "event":
+            return f"<EVENT> :{message.created_at}\n{cleaned_message}</EVENT>"
         else:
             return f"NORMAL: {cleaned_message}"
