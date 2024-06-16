@@ -273,7 +273,7 @@ class CharacterAgent(AbstractAgent):
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
             raise e
-    async def agent_deep_output(self, db_context: DBContext, uid,role_status, input_text, result_dict,action, llm,is_use_remeber:bool=True,):
+    async def agent_deep_output(self, db_context: DBContext, uid,role_status, input_text, result_dict,data_dict,action, llm,is_use_remeber:bool=True,):
         logging.info("Agent : 角色回复生成...")
         # messages = db_context.message_memory.buffer_messages(uid, count=30)
         # print(messages)
@@ -283,6 +283,7 @@ class CharacterAgent(AbstractAgent):
         chosen_strategies = result_dict.get('chosen_strategies', '无选择策略信息')
         strategy_result = result_dict.get('strategy_result', '无策略因子结果信息')
         role_chat_style = result_dict.get('role_chat_style', '活泼')
+        history = data_dict.get('history', ''),
         llm =Tongyi(model_name="qwen-max",dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         system_prompt = DEEP_OUTPUT.format(
             intent=intent_analysis,
@@ -290,6 +291,7 @@ class CharacterAgent(AbstractAgent):
             context=contextual_understanding,
             user_input=input_text,
             role_info = self.base_info+"\n角色语言示例："+role_chat_style,
+            history=history,
             role_status=role_status,
             chosen_strategies=chosen_strategies,
             strategy_result=strategy_result
@@ -754,7 +756,7 @@ class CharacterAgent(AbstractAgent):
             # result = ""
             try:
                 async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,action=action,
-                                                      input_text=query, result_dict=result_dict, llm=ollm):
+                                                      input_text=query, result_dict=result_dict,data_dict=data_dict, llm=ollm):
                     # result += r
                     yield r
 

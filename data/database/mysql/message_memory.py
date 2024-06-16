@@ -73,9 +73,9 @@ class MessageMemory:
 
         return message_objects
 
-    def format_message(self, message, user_name, role_name):
-        # 这是一个示例格式化函数，具体实现可能根据你的需求有所不同
-        return f"{message.created_at.strftime('%Y-%m-%d %H:%M:%S')} - [{role_name} ({user_name})]: {message.message}"
+    # def format_message(self, message, user_name, role_name):
+    #     # 这是一个示例格式化函数，具体实现可能根据你的需求有所不同
+    #     return f"{message.created_at.strftime('%Y-%m-%d %H:%M:%S')} - [{role_name} ({user_name})]: {message.message}"
 
     async def check_and_buffer_messages(self, guid: str, user_name: str, role_name: str, threshold: int = 10,
                                         start_date=None, end_date=None) -> Tuple[str, List[int]]:
@@ -123,10 +123,10 @@ class MessageMemory:
         # 使用正则表达式移除消息中的大括号{}
         cleaned_message = re.sub(r'\{|\}', '', message.message)
         if message.type == "human":
-            return f"EventTime:{message.created_at}, {user_name}: {cleaned_message}"
+            return f"{message.created_at}, {user_name}: {cleaned_message}"
         elif message.type == "ai":
-            return f"EventTime:{message.created_at}, {role_name}: {cleaned_message}"
+            return f"{message.created_at}, {role_name}: {cleaned_message}"
         elif message.type == "system":
-            return f"<SYSTEM> EventTime:{message.created_at}\n{cleaned_message}</SYSTEM>"
+            return f"<SYSTEM> :{message.created_at}\n{cleaned_message}</SYSTEM>"
         else:
             return f"NORMAL: {cleaned_message}"
