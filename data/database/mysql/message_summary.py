@@ -60,7 +60,7 @@ class MessageSummary:
 
         return query.order_by(Message_Summary.created_at.desc()).limit(max_count).all()
 
-    def buffer_summaries(self, guid, max_count=100,start_date=None, end_date=None, ):
+    def buffer_summaries(self, guid, max_count=50,start_date=None, end_date=None, ):
         """
         Retrieves and concatenates summaries into a single string, including their creation dates.
         :param session: The SQLAlchemy session to use for the query

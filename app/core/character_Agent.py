@@ -1076,7 +1076,7 @@ class CharacterAgent(AbstractAgent):
         logging.info("Agent Use Chain: %s", action_name)
         return await self.use_tool_by_name(guid=guid,user_name=user_name,role_name=role_name,action_name=action_name, action_input=action_input,role_status=role_status,db_context=db_context)
     async def memory_entity(self,guid,user_name,role_name,message_threshold,db_context:DBContext):
-        message_content, message_ids = await db_context.message_memory.check_and_buffer_messages(guid, user_name,
+        message_content, message_ids = db_context.message_memory.check_and_buffer_messages(guid, user_name,
                                                                                                  role_name,
                                                                                                  message_threshold)
         if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
@@ -1111,7 +1111,7 @@ class CharacterAgent(AbstractAgent):
         # db_context.message_memory.add_message(human_message)
         async for chunk in self.rute_retriever(guid=guid,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm):
             yield chunk
-        asyncio.create_task(self.memory_summary(guid, user_name, role_name, 10, db_context))
+        asyncio.create_task(self.memory_summary(guid=guid,user_name=user_name,role_name=role_name,message_threshold=10,db_context=db_context))
         asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))
 
 
@@ -1366,7 +1366,7 @@ class CharacterAgent(AbstractAgent):
             # db_context.message_summary.add_summary(message_summary=summary)
 
         else:
-            message_content, message_ids = await db_context.message_memory.check_and_buffer_messages(guid, user_name,
+            message_content, message_ids =  db_context.message_memory.check_and_buffer_messages(guid, user_name,
                                                                                                      role_name,
                                                                                                      message_threshold)
             if len(message_ids) % message_threshold == 0 and len(message_ids) != 0:
@@ -1384,6 +1384,7 @@ class CharacterAgent(AbstractAgent):
 
                 # 保存摘要到Message_Summary表，并关联消息ID
                 summary = Message_Summary(user_guid=guid, summary=results)
+                print(message_ids)
                 db_context.message_summary.add_summary(message_summary=summary, message_ids=message_ids)
                 logging.info(f"Agent Summary: {summary}")
                 # print(message_summary_id)
