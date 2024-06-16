@@ -89,7 +89,7 @@ class CharacterAgent(AbstractAgent):
 
         self.user_input = ""
 
-    async def response_fast(self, prompt_type: PromptType, db_context: DBContext, role_status, user_name, role_name, guid, query,
+    async def response_fast(self, prompt_type: PromptType, db_context: DBContext,match_kg, role_status, user_name, role_name, guid, query,
                             llm,remember:bool=True)->AsyncGenerator:
         """
         异步生成并流式返回快速聊天的响应。
@@ -108,16 +108,19 @@ class CharacterAgent(AbstractAgent):
         system_prompt = self._generate_system_prompt(prompt_type=prompt_type, db_context=db_context,
                                                      role_status=role_status, user=user_name, char=role_name)
         print(system_prompt)
-        system_prompt = system_prompt+"""\n### 对话记录
-                                        {conversation_massages}
-
-                                        ### 用户：{user_input}
-                                        ### 回复："""
+        system_prompt = system_prompt+"""
+        ### 经典桥段：
+        {classic_scenes}
+        ### 对话记录
+        {conversation_massages}                  
+        ### 用户：{user_input}
+        ### 回复：
+        """
         # # 获取消息历史
         # messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=20)
         messages = db_context.message_memory.buffer_messages(guid, count=12)
         print(messages)
-        prompt = PromptTemplate(template=system_prompt, input_variables=["conversation_massages","user_input"])
+        prompt = PromptTemplate(template=system_prompt, input_variables=["classic_scenes","conversation_massages","user_input"])
         # messages.append(HumanMessage(content=query))
 
         # # 构造聊天提示模板
@@ -133,7 +136,7 @@ class CharacterAgent(AbstractAgent):
         response_metadata = None
 
         # 异步流式处理回复
-        async for r in fast_chain.astream({"conversation_massages": messages,"user_input": query}):
+        async for r in fast_chain.astream({"classic_scenes":match_kg,"conversation_massages": messages,"user_input": query}):
             results += r
             print(r)
             # response_metadata = r
@@ -268,7 +271,7 @@ class CharacterAgent(AbstractAgent):
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
             raise e
-    async def agent_deep_output(self, db_context: DBContext, uid,role_status, input_text, result_dict, llm,is_use_remeber:bool=True):
+    async def agent_deep_output(self, db_context: DBContext, uid,role_status, input_text, result_dict,action, llm,is_use_remeber:bool=True,):
         logging.info("Agent : 角色回复生成...")
         # messages = db_context.message_memory.buffer_messages(uid, count=30)
         # print(messages)
@@ -299,7 +302,7 @@ class CharacterAgent(AbstractAgent):
         try:
 
             async for chunk in chain.astream({"user_input": input_text}):
-                data_to_send = json.dumps({"action": "情感陪伴", "text": chunk}, ensure_ascii=False)
+                data_to_send = json.dumps({"action": action, "text": chunk}, ensure_ascii=False)
                 result+=chunk
                 yield data_to_send
                 # yield chunk
@@ -309,7 +312,7 @@ class CharacterAgent(AbstractAgent):
             logging.error("Rate limit reached, retrying...")
 
             async for chunk in chain.astream({"user_input": input_text}):
-                data_to_send = json.dumps({"action": "情感陪伴", "text": chunk}, ensure_ascii=False)
+                data_to_send = json.dumps({"action": action, "text": chunk}, ensure_ascii=False)
                 result+=chunk
                 yield data_to_send
             # logging.info(f"Agent_output: {result}")
@@ -320,7 +323,7 @@ class CharacterAgent(AbstractAgent):
             human_message = Message(user_guid=uid, type="human", role="主人", message=input_text,
                                     generate_from="GameUser")
             ai_message = Message(user_guid=uid, type="ai", role="兔兔", message=result,
-                                 generate_from="DEEP_AGENT")
+                                 generate_from=action)
             messages = [human_message, ai_message]
             await self.remember(messages, db_context)
 
@@ -393,9 +396,11 @@ class CharacterAgent(AbstractAgent):
     @staticmethod
     async def handle_entity_transfer(role_info,db_context, uid, input_text, result_dict, llm):
         logging.info("Agent : 实体转换策略执行...")
+        summary = db_context.message_summary.buffer_summaries(uid, max_count=10)
         system_prompt = DEEP_STRATEGY_ENTITY_TRANSFER.format(
             role_info=role_info,
-            user_input=input_text
+            user_input=input_text,
+
         )
         # print(system_prompt)
         prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
@@ -477,11 +482,14 @@ class CharacterAgent(AbstractAgent):
         intent = await self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm)
         conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,match_kg=combined_content,llm=tllm)
         if "快速回复" in conversational:
-            async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+            async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,match_kg=combined_content,
                                                   role_status=role_status,
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
                     yield r
         else:
+            action = intent
+            data_to_flag = json.dumps({"action": action, "text": None}, ensure_ascii=False)
+            yield data_to_flag
             tasks = {
                 # 'intent': self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm),
                 'emotion': self.agent_deep_emotion(db_context=db_context, uid=guid, input_text=query, llm=tllm),
@@ -542,7 +550,7 @@ class CharacterAgent(AbstractAgent):
 
             # result = ""
             try:
-                async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,
+                async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,action=action,
                                                       input_text=query, result_dict=result_dict, llm=ollm):
                     # result += r
                     yield r
@@ -552,7 +560,7 @@ class CharacterAgent(AbstractAgent):
                 async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
                                                   role_status=role_status,
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query,
-                                                  llm=llm):
+                                                  llm=llm,match_kg=combined_content):
                     yield r
 
 
