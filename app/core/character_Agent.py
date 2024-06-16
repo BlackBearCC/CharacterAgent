@@ -19,7 +19,8 @@ from ai.models.buffer import get_prefixed_buffer_string
 
 from ai.models.role_memory import OpinionMemory
 from ai.prompts.deep_agent import DEEP_INTENT, DEEP_EMOTION, DEEP_CONTEXT, DEEP_CHOICE, DEEP_OUTPUT, \
-    DEEP_STRATEGY_ENTITY_TRANSFER, DEEP_STRATEGY_CONTEXT_KEY, DEEP_STRATEGY_USER_ENTITY, DEEP_FAST_RUTE
+    DEEP_STRATEGY_ENTITY_TRANSFER, DEEP_STRATEGY_CONTEXT_KEY, DEEP_STRATEGY_USER_ENTITY, DEEP_FAST_RUTE, \
+    DEEP_STRATEGY_HOLD_ATTENTION
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
@@ -423,6 +424,40 @@ class CharacterAgent(AbstractAgent):
             raise e
 
     @staticmethod
+    async def handle_sustained_attention(role_info,db_context, uid, input_text, result_dict, llm):
+        logging.info("Agent : 持续关注策略执行...")
+        # summary = db_context.message_summary.buffer_summaries(uid, max_count=10)
+        context = result_dict.get('context', '无上下文信息')
+        emotion = result_dict.get('emotion', '无情感信息')
+        user_entity = db_context.entity_memory.get_entity(uid)
+        system_prompt = DEEP_STRATEGY_HOLD_ATTENTION.format(
+            role_info=role_info,
+            user_input=input_text,
+            user_entity = user_entity,
+            context = context,
+            emotion = emotion,
+        )
+        # print(system_prompt)
+        prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
+        output_parser = StrOutputParser()
+
+        chain = prompt | llm | output_parser
+
+        try:
+            response = await chain.ainvoke({"user_input": input_text})
+            logging.info(f"Agent_持续关注输出: {response}")
+
+            return response
+        except RateLimitError:
+            logging.error("Rate limit reached, retrying...")
+            response = await chain.ainvoke({"user_input": input_text})
+            print(f"Agent_持续关注输出: {response}")
+            return response
+        except Exception as e:
+            logging.error(f"Unexpected error occurred: {e}")
+            raise e
+
+    @staticmethod
     async def conversation_rute( role_info,intent_analysis, input_text,match_kg,llm):
         logging.info("Agent : 对话模式匹配...")
         system_prompt = DEEP_FAST_RUTE.format(
@@ -507,7 +542,7 @@ class CharacterAgent(AbstractAgent):
                 "上下文记忆": self.handle_context_memory,
                 "用户实体": self.handle_user_profile,
                 # "情感共情": self.handle_emotional_engagement,
-                # "持续关注": self.handle_sustained_attention,
+                "持续关注": self.handle_sustained_attention,
                 # "自我特质": self.handle_role_trait_response,
                 # "问候和关心": self.handle_greetings_and_care,
                 # "切换话题": self.handle_topic_switch,
