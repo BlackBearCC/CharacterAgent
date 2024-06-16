@@ -521,7 +521,7 @@ async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseCha
 
 
 @app.post("/game/event_response")
-async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_glm4),backup_llm:BaseChatModel=Depends(get_qwen_plus)):
+async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_chat_qwen_max),backup_llm:BaseChatModel=Depends(get_glm4)):
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

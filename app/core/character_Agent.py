@@ -455,8 +455,8 @@ class CharacterAgent(AbstractAgent):
         tllm = Tongyi(model_name="qwen-turbo", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
         intent = await self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm)
-        conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,match_kg=combined_content,llm=llm)
-        if "禁用" in conversational:
+        conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,match_kg=combined_content,llm=tllm)
+        if "快速回复" in conversational:
             async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
                                                   role_status=role_status,
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
@@ -464,8 +464,8 @@ class CharacterAgent(AbstractAgent):
         else:
             tasks = {
                 # 'intent': self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm),
-                'emotion': self.agent_deep_emotion(db_context=db_context, uid=guid, input_text=query, llm=ollm),
-                'context': self.agent_deep_context(db_context=db_context, uid=guid, input_text=query, llm=ollm)
+                'emotion': self.agent_deep_emotion(db_context=db_context, uid=guid, input_text=query, llm=tllm),
+                'context': self.agent_deep_context(db_context=db_context, uid=guid, input_text=query, llm=tllm)
             }
             results = await asyncio.gather(*tasks.values(), return_exceptions=True)
             result_dict = {}

@@ -24,6 +24,7 @@ uvicorn
 itsdangerous
 unstructured
 
+openai
 
 python-dotenv
 gradio_client
