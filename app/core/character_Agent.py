@@ -22,6 +22,7 @@ from ai.prompts.deep_agent import DEEP_INTENT, DEEP_EMOTION, DEEP_CONTEXT, DEEP_
     DEEP_STRATEGY_ENTITY_TRANSFER, DEEP_STRATEGY_CONTEXT_KEY, DEEP_STRATEGY_USER_ENTITY, DEEP_FAST_RUTE
 
 from ai.prompts.deep_character import DEEP_CHARACTER_PROMPT
+from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
 from ai.prompts.game_function import WRITE_DIARY_PROMPT, EVENT_PROMPT
 from ai.prompts.prompt_emum import PromptType
 from ai.prompts.reflexion import ENTITY_SUMMARIZATION_PROMPT
@@ -108,7 +109,7 @@ class CharacterAgent(AbstractAgent):
                                                      role_status=role_status, user=user_name, char=role_name)
         print(system_prompt)
         # 获取消息历史
-        messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=10)
+        messages = db_context.message_memory.buffer_with_langchain_msg_model(guid, count=20)
         print(messages)
         messages.append(HumanMessage(content=query))
 
@@ -117,19 +118,20 @@ class CharacterAgent(AbstractAgent):
             ("system", system_prompt),
             MessagesPlaceholder(variable_name="message"),
         ])
-
+        output_parser = StrOutputParser()
         # 创建快速回复链
-        fast_chain = prompt | llm
+        fast_chain = prompt | llm |output_parser
 
         results = ""
         response_metadata = None
 
         # 异步流式处理回复
         async for r in fast_chain.astream({"message": messages}):
-            results += r.content
-            response_metadata = r.response_metadata
+            results += r
+            print(r)
+            # response_metadata = r
             # 封装并发送数据
-            data_to_send = json.dumps({"action": "快速回复", "text": r.content}, ensure_ascii=False)
+            data_to_send = json.dumps({"action": "快速回复", "text": r}, ensure_ascii=False)
             yield data_to_send
         if remember:
             human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
@@ -259,7 +261,7 @@ class CharacterAgent(AbstractAgent):
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
             raise e
-    async def agent_deep_output(self, db_context: DBContext, uid,role_status, input_text, result_dict, llm):
+    async def agent_deep_output(self, db_context: DBContext, uid,role_status, input_text, result_dict, llm,is_use_remeber:bool=True):
         logging.info("Agent : 角色回复生成...")
         # messages = db_context.message_memory.buffer_messages(uid, count=30)
         # print(messages)
@@ -286,11 +288,12 @@ class CharacterAgent(AbstractAgent):
         output_parser = StrOutputParser()
 
         chain = prompt | llm | output_parser
-
+        result =""
         try:
 
             async for chunk in chain.astream({"user_input": input_text}):
                 data_to_send = json.dumps({"action": "情感陪伴", "text": chunk}, ensure_ascii=False)
+                result+=chunk
                 yield data_to_send
                 # yield chunk
             # logging.info(f"Agent_output: {result}")
@@ -300,11 +303,21 @@ class CharacterAgent(AbstractAgent):
 
             async for chunk in chain.astream({"user_input": input_text}):
                 data_to_send = json.dumps({"action": "情感陪伴", "text": chunk}, ensure_ascii=False)
+                result+=chunk
                 yield data_to_send
             # logging.info(f"Agent_output: {result}")
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
             raise e
+        if is_use_remeber:
+            human_message = Message(user_guid=uid, type="human", role="主人", message=input_text,
+                                    generate_from="GameUser")
+            ai_message = Message(user_guid=uid, type="ai", role="兔兔", message=result,
+                                 generate_from="DEEP_AGENT")
+            messages = [human_message, ai_message]
+            await self.remember(messages, db_context)
+
+
 
     @staticmethod
     async def handle_context_memory(role_info,db_context, uid, input_text, result_dict, llm):
@@ -520,18 +533,13 @@ class CharacterAgent(AbstractAgent):
 
             result_dict["strategy_result"] = strategy_result_value
 
-            result = ""
+            # result = ""
             try:
                 async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,
                                                       input_text=query, result_dict=result_dict, llm=ollm):
-                    result += r
+                    # result += r
                     yield r
-                human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
-                                        generate_from="GameUser")
-                ai_message = Message(user_guid=guid, type="ai", role=role_name, message=result,
-                                     generate_from="DEEP_AGENT")
-                messages = [human_message, ai_message]
-                await self.remember(messages, db_context)
+
             except Exception as e:
                 logging.error(f"处理策略时发生错误: {e},使用fastchain重试")
                 async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
@@ -987,7 +995,8 @@ class CharacterAgent(AbstractAgent):
             # Setup chains
             opinion_memory = OpinionMemory(
                 connection_string="mysql+pymysql://db_role_agent:qq72122219@182.254.242.30:3306/db_role_agent")
-            system_prompt = self.character_info.format(
+            system_prompt = FAST_CHARACTER_PROMPT.format(
+                role_info = self.base_info,
                 role_state=role_status,
                 user=user,
                 char=char,

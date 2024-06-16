@@ -398,8 +398,9 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
         uid = user.guid
         user_name = user.username
         role_name = user.role_name
+        role_status = request.role_status
 
-        generator = chat_generator(uid, user_name, role_name, request.input, role_status=request.role_status,
+        generator = chat_generator(uid, user_name, role_name, request.input, role_status=role_status,
                                    llm=llm,backup_llm=backup_llm,
                                              db_context=db_context)
         return EventSourceResponse(generator)
