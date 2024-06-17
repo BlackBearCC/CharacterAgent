@@ -143,7 +143,7 @@ class CharacterAgent(AbstractAgent):
         # 异步流式处理回复
         async for r in fast_chain.astream({"classic_scenes":match_kg,"conversation_massages": messages,"user_input": query}):
             results += r
-            print(r)
+            # print(r)
             # response_metadata = r
             # 封装并发送数据
             data_to_send = json.dumps({"action": "快速回复", "text": r}, ensure_ascii=False)
@@ -673,12 +673,12 @@ class CharacterAgent(AbstractAgent):
             logging.error(f"Unexpected error occurred: {e}")
             raise e
     @staticmethod
-    async def conversation_rute( role_info,intent_analysis, input_text,context,match_kg,llm):
+    async def conversation_rute( role_info, input_text,context,match_kg,llm):
         logging.info("Agent : 对话模式匹配...")
         system_prompt = DEEP_FAST_RUTE.format(
             role_info=role_info,
             user_input=input_text,
-            intent_analysis=intent_analysis,
+
             match_kg=match_kg,
             context=context,
         )
@@ -708,13 +708,13 @@ class CharacterAgent(AbstractAgent):
         combined_content = ''
         environment_content =""
         try:
-            documents = vector_db.similarity_search( query=query, k=5,expr="namespace == 'normal'")
+            documents = vector_db.similarity_search( query=query, k=3,expr="namespace == 'normal'")
             combined_content = ''.join(doc.page_content for doc in documents)
             combined_content = combined_content.replace("{user}", user_name).replace("{char}", role_name)
         except Exception as e:
             combined_content ="无"
         try:
-            environment_kg = vector_db.similarity_search(query=query, k=2,expr="namespace == 'environment'")
+            environment_kg = vector_db.similarity_search(query=query, k=1,expr="namespace == 'environment'")
             # print("环境知识:", environment_kg)
             environment_content = ''.join(env.page_content for env in environment_kg)
             environment_content = environment_content.replace("{user}", user_name).replace("{char}", role_name)
@@ -752,14 +752,29 @@ class CharacterAgent(AbstractAgent):
         ollm = Tongyi(model_name="qwen-plus", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
         tllm = Tongyi(model_name="qwen-turbo", dashscope_api_key="sk-dc356b8ca42c41788717c007f49e134a")
 
-        intent = await self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm)
-        conversational= await self.conversation_rute(role_info=role_status,intent_analysis=intent, input_text=query,context=history,match_kg=combined_content,llm=tllm)
+        # intent = await self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm)
+        tasks = {
+            'intent': self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=tllm),
+            'emotion': self.agent_deep_emotion(db_context=db_context, uid=guid, input_text=query, llm=tllm),
+            'context': self.agent_deep_context(db_context=db_context, uid=guid, input_text=query, llm=tllm)
+        }
+        conversational= await self.conversation_rute(role_info=role_status, input_text=query,context=history,match_kg=combined_content,llm=llm)
+
         if "快速回复" in conversational:
             async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,match_kg=combined_content,
                                                   role_status=role_status,data_dict=data_dict,
                                                   user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
                     yield r
         else:
+            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+            result_dict = {}
+            for key, result in zip(tasks.keys(), results):
+                # 如果有任务抛出异常，这里会捕获异常而不是直接中断程序
+                if isinstance(result, Exception):
+                    result_dict[key] = f"无"
+                else:
+                    result_dict[key] = result
+            intent = result_dict['intent']
             intent_mapping = {
                 "表达诉求": "表达诉求",
                 "观点评价": "观点评价",
@@ -781,19 +796,9 @@ class CharacterAgent(AbstractAgent):
 
             data_to_flag = json.dumps({"action": action, "text": None}, ensure_ascii=False)
             yield data_to_flag
-            tasks = {
-                # 'intent': self.agent_deep_intent(db_context=db_context, uid=guid, input_text=query, llm=ollm),
-                'emotion': self.agent_deep_emotion(db_context=db_context, uid=guid, input_text=query, llm=tllm),
-                'context': self.agent_deep_context(db_context=db_context, uid=guid, input_text=query, llm=tllm)
-            }
-            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-            result_dict = {}
-            for key, result in zip(tasks.keys(), results):
-                # 如果有任务抛出异常，这里会捕获异常而不是直接中断程序
-                if isinstance(result, Exception):
-                    result_dict[key] = f"无"
-                else:
-                    result_dict[key] = result
+
+
+
             KEYWORD_HANDLERS = {
                 "上下文记忆": self.handle_context_memory,
                 "用户实体": self.handle_user_profile,
@@ -806,7 +811,7 @@ class CharacterAgent(AbstractAgent):
                 "实体转换": self.handle_entity_transfer,
                 "信息提供": self.handle_information_search,
             }
-            result_dict['intent'] = intent
+
             deep_choice_result = await self.agent_deep_choice(db_context=db_context, uid=guid, input_text=query,
                                                               result_dict=result_dict, llm=ollm)
             result_dict['chosen_strategies'] = deep_choice_result
@@ -1278,7 +1283,7 @@ class CharacterAgent(AbstractAgent):
                                                         generate_from="WriteDiary"))
 
 
-    def _generate_system_prompt(self,prompt_type: PromptType,db_context:DBContext,data_dict,guid:str=None,role=None,role_status=None, user=None,char=None,date_start=None,date_end=None):
+    def _generate_system_prompt(self,prompt_type: PromptType,db_context:DBContext,data_dict=None,guid:str=None,role=None,role_status=None, user=None,char=None,date_start=None,date_end=None):
         if prompt_type == PromptType.EVENT:
             recent_event =db_context.message_summary.buffer_summaries(guid,20)
             system_prompt = EVENT_PROMPT.format(

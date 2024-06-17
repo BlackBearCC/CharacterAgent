@@ -33,3 +33,4 @@ httpx-sse
 PyJWT
 
 locust
+tenacity==8.1.0

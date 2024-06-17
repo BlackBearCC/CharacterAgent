@@ -268,11 +268,9 @@ async def get_chat_qwen_max() -> BaseChatModel:
 
 async def get_ollama()->BaseChatModel:
     return ChatOllama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
-async def get_glm3_turbo() -> BaseChatModel:
-    return ChatZhipuAI(model_name="glm3-turbo", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
 
 async def get_glm4() -> BaseChatModel:
-    return ChatZhipuAI(model_name="glm-4", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
+    return ChatZhipuAI(model_name="glm-4-airx", temperature=0.7, top_k=100, top_p=0.9,api_key = glm_api_key)
 @app.post("/generate_sound")
 async def generate_wav(request: GenerateSound,client = Depends(get_client)):
     first_sentence = request.text.split('.')[0].strip()  # 这里简单地以句号分割获取第一句，根据实际情况调整
@@ -428,8 +426,7 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
     return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
 
 @app.post("/game/chat")
-async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_chat_qwen_plus)):
-    logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
+async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_glm4)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
     try:
         user = db_context.user_db.get_user_by_game_uid(request.uid)
@@ -563,7 +560,7 @@ async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseCha
 
 
 @app.post("/game/event_response")
-async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_chat_qwen_max),backup_llm:BaseChatModel=Depends(get_glm4)):
+async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_glm4),backup_llm:BaseChatModel=Depends(get_chat_qwen_max)):
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
