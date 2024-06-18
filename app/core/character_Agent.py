@@ -438,26 +438,28 @@ class CharacterAgent(AbstractAgent):
     @staticmethod
     async def handle_information_search(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
         logging.info("Agent : 信息提供因子生成中...")
+        game_uid = data_dict.get('game_uid', 'bkuslqpmpe')
 
         information = f"环境信息：+{data_dict.get('environment', '无')}"
         # print(information)
+        data_pairs = ["\n冰箱数据："]
         async with aiohttp.ClientSession() as session:
             # 发送HTTP POST请求
             async with session.post("http://101.43.31.140:12000/api/box_foods",
-                                    json={"guid": "bkuslqpmpe"}) as resp:
+                                    json={"guid": game_uid}) as resp:
                 if resp.status == 200:
                     response_content = await resp.json()
                     logging.info(f"Agent : 冰箱数据获取: {response_content}")
                     # 获取数据
                     data_list = response_content["data"]
+                    print(data_list)
                     data_dicts = [item for item in data_list]  # 将数据转化为字典列表
                     # 拼接字符串
-                    data_pairs = ["冰箱数据："]
                     for data_dict in data_dicts:
                         for key, value in data_dict.items():
                             data_pairs.append(f"{key}={value}")
         information += " ".join(data_pairs)
-        print(information)
+
         system_prompt = DEEP_STRATEGY_SEARCH.format(
             role_info=role_info,
             user_input=input_text,
@@ -706,7 +708,7 @@ class CharacterAgent(AbstractAgent):
             return "快速回复"
 
 
-    async def  rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm)->AsyncGenerator[str, None]:
+    async def  rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm,game_uid=None)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
         combined_content = ''
         environment_content =""
@@ -743,6 +745,7 @@ class CharacterAgent(AbstractAgent):
         # print("message_memory:"+history)
         summary = db_context.message_summary.buffer_summaries(guid, 10)
         data_dict = {
+            "game_uid":game_uid,
             "user_name": user_name,
             "role_name": role_name,
             "role_status":role_status,
@@ -785,7 +788,7 @@ class CharacterAgent(AbstractAgent):
                 "现实实体查询": "事实转换",
                 "攻击角色": "防御对话",
                 "情感陪伴": "情感陪伴",
-                "信息查找": "信息查找",
+                "信息查询": "信息查找",
                 "闲聊": "深度回复",  # 添加对'闲聊'的处理
             }
 
@@ -1169,7 +1172,7 @@ class CharacterAgent(AbstractAgent):
         else:
             logging.info("Agent 实体更新记忆: 跳过")
 
-    async def response(self, guid:str ,vector_db,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,vector_db,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm,game_uid=None) -> AsyncGenerator[str, None]:
 
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
@@ -1177,7 +1180,7 @@ class CharacterAgent(AbstractAgent):
         # human_message = Message(user_guid=guid, type="human", role=user_name, message=input_text,generate_from="GameUser")
         # logging.info(f"{guid},User Input: {input_text}")  # 记录用户输入的日志
         # db_context.message_memory.add_message(human_message)
-        async for chunk in self.rute_retriever(guid=guid,vector_db=vector_db,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm):
+        async for chunk in self.rute_retriever(guid=guid,vector_db=vector_db,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm,game_uid=None):
             yield chunk
         asyncio.create_task(self.memory_summary(guid=guid,user_name=user_name,role_name=role_name,message_threshold=10,db_context=db_context))
         asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))

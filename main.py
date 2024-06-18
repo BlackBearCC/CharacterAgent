@@ -352,7 +352,7 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"系统错误: {str(e)}")
 
 
-async def chat_generator(uid: str, user_name: str, role_name: str, input_text: str, role_status: str,
+async def chat_generator(uid: str,game_uid, user_name: str, role_name: str, input_text: str, role_status: str,
                         db_context: DBContext,vector_db:Milvus, llm,backup_llm) -> AsyncGenerator[str, None]:
     retries = 3
     delay = 1  # 初始重试延迟时间（秒）
@@ -365,7 +365,7 @@ async def chat_generator(uid: str, user_name: str, role_name: str, input_text: s
         used_backup = True  # 在第一次重试后标记为已使用备份
 
         try:
-            async for response_chunk in tuji_agent.response(guid=uid, user_name=user_name, role_name=role_name,
+            async for response_chunk in tuji_agent.response(guid=uid,game_uid=game_uid, user_name=user_name, role_name=role_name,
                                                             input_text=input_text, role_status=role_status,vector_db=vector_db,
                                                             db_context=db_context, llm=current_llm):
                 yield response_chunk
@@ -429,6 +429,7 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_glm4)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}。角色状态: {request.role_status}")
     try:
+        game_uid = request.uid
         user = db_context.user_db.get_user_by_game_uid(request.uid)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -438,7 +439,7 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
         role_name = user.role_name
         role_status = request.role_status
 
-        generator = chat_generator(uid, user_name, role_name, request.input, role_status=role_status,
+        generator = chat_generator(uid,game_uid, user_name, role_name, request.input, role_status=role_status,
                                    llm=llm,backup_llm=backup_llm,vector_db=vector_db,
                                              db_context=db_context)
         return EventSourceResponse(generator)
