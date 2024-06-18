@@ -148,6 +148,7 @@ class CharacterAgent(AbstractAgent):
             # 封装并发送数据
             data_to_send = json.dumps({"action": "快速回复", "text": r}, ensure_ascii=False)
             yield data_to_send
+            logging.info(f"Agent Output:Action:快速回复-Result{results}")
         if remember:
             human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
                                     generate_from="GameUser")
@@ -315,6 +316,8 @@ class CharacterAgent(AbstractAgent):
                 result+=chunk
                 yield data_to_send
                 # yield chunk
+
+            logging.info(f"Agent Output:Action:{action}-Result:{result}")
             # logging.info(f"Agent_output: {result}")
 
         except RateLimitError:
@@ -325,7 +328,7 @@ class CharacterAgent(AbstractAgent):
                 data_to_send = json.dumps({"action": action, "text": chunk}, ensure_ascii=False)
                 result+=chunk
                 yield data_to_send
-            # logging.info(f"Agent_output: {result}")
+            logging.info(f"Agent Output:Action:{action}-Result:{result}")
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
             raise e
@@ -703,7 +706,7 @@ class CharacterAgent(AbstractAgent):
             return "快速回复"
 
 
-    async def rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm)->AsyncGenerator[str, None]:
+    async def  rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
         combined_content = ''
         environment_content =""
@@ -846,20 +849,11 @@ class CharacterAgent(AbstractAgent):
             result_dict["strategy_result"] = strategy_result_value
 
             # result = ""
-            try:
-                async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,action=action,
+            # try:
+            async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,action=action,
                                                       input_text=query, result_dict=result_dict,data_dict=data_dict, llm=ollm):
                     # result += r
                     yield r
-
-            except Exception as e:
-                logging.error(f"处理策略时发生错误: {e},使用fastchain重试")
-                async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
-                                                  role_status=role_status,data_dict=data_dict,
-                                                  user_name=user_name, role_name=role_name, guid=guid, query=query,
-                                                  llm=llm,match_kg=combined_content):
-                    yield r
-
 
 
 
@@ -1367,33 +1361,6 @@ class CharacterAgent(AbstractAgent):
         asyncio.create_task(self.memory_summary(guid, user_name, role_name, 10, db_context))
         asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))
 
-
-
-
-
-        #
-        # info_with_role = EVENT_PROMPT.replace("{role}",self.base_info)
-        # event_recent = info_with_role.replace("{recent_event}",db_context.message_summary.buffer_summaries(guid,20))
-        # info_with_history = event_recent.replace("{history}",db_context.message_memory.buffer_messages(guid,user_name,role_name,count=10))
-        # info_name = info_with_history.replace("{user}", user_name).replace("{char}", role_name)
-        # # print(info_name)
-        # prompt_template = PromptTemplate(template=info_name, input_variables=["event"])
-        # output_parser = StrOutputParser()
-        # event_chain = prompt_template | llm | output_parser
-        # results =""
-        #
-        # async for chunk in event_chain.astream({"event":event}):
-        #     results+=chunk
-        #     yield chunk
-        #
-        # system_message = Message(user_guid=guid, type="system", role="系统事件", message=event,
-        #                      generate_from="SystemEvent")
-        #
-        # ai_message = Message(user_guid=guid, type="ai", role=role_name, message=results,
-        #                      generate_from="SystemEvent")
-        # db_context.message_memory.add_messages([system_message,ai_message])
-        # logging.info(f"Agent System Event: {event}")
-        # logging.info(f"Agent System Event Response: {results}")
 
 
     async def balderdash(self, user_name,role_name,role_info,guid:str,exception,user_input,db_context:DBContext,llm=None):
