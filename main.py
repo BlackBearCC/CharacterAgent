@@ -427,7 +427,7 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
 
 @app.post("/game/chat")
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_glm4)):
-    logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}")
+    logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}。角色状态: {request.role_status}")
     try:
         user = db_context.user_db.get_user_by_game_uid(request.uid)
         if not user:
