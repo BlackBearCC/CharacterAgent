@@ -265,7 +265,7 @@ async def get_chat_qwen_turbo() -> BaseChatModel:
 async def get_chat_qwen_plus() -> BaseChatModel:
     return ChatTongyi(model_name="qwen-plus", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
 async def get_chat_qwen_max() -> BaseChatModel:
-    return ChatTongyi(model_name="qwen-max", temperature=0.5, top_k=100, top_p=0.9,api_key = tongyi_api_key)
+    return ChatTongyi(model_name="qwen-max", temperature=0.7, top_k=100, top_p=0.9,api_key = tongyi_api_key)
 
 async def get_ollama()->BaseChatModel:
     return ChatOllama(model="qwen:32b",temperature=0.7, top_k=100,top_p=0.9,base_url="http://182.254.242.30:11434")
@@ -568,7 +568,7 @@ async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseCha
 
 
 @app.post("/game/event_response")
-async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_glm4),backup_llm:BaseChatModel=Depends(get_chat_qwen_max)):
+async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_chat_qwen_max),backup_llm:BaseChatModel=Depends(get_glm4)):
     user = db_context.user_db.get_user_by_game_uid(request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
