@@ -148,7 +148,7 @@ class CharacterAgent(AbstractAgent):
             # 封装并发送数据
             data_to_send = json.dumps({"action": "快速回复", "text": r}, ensure_ascii=False)
             yield data_to_send
-            logging.info(f"Agent Output:Action:快速回复-Result{results}")
+        logging.info(f"Agent Output:Action:快速回复-Result{results}")
         if remember:
             human_message = Message(user_guid=guid, type="human", role=user_name, message=query,
                                     generate_from="GameUser")

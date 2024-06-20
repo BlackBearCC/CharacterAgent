@@ -35,6 +35,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sse_starlette import EventSourceResponse
 from starlette.responses import JSONResponse, FileResponse
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from ai.prompts.base_character import BASE_CHARACTER_PROMPT
 from ai.prompts.fast_character import FAST_CHARACTER_PROMPT
@@ -425,12 +426,18 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
     return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
 
+# 定义重试装饰器，最多尝试3次，每次重试之间随机指数退避延迟
+@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, min=4, max=10))
+async def fetch_user_with_retry(db_context: DBContext, game_uid: str):
+    return db_context.user_db.get_user_by_game_uid(game_uid)
+
 @app.post("/game/chat")
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_glm4)):
     logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}。角色状态: {request.role_status}")
     try:
         game_uid = request.uid
-        user = db_context.user_db.get_user_by_game_uid(request.uid)
+        user = await fetch_user_with_retry(db_context, request.uid)
+
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
