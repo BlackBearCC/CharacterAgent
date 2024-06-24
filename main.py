@@ -426,6 +426,8 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
     return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
 
+
+
 # 定义重试装饰器，最多尝试3次，每次重试之间随机指数退避延迟
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, min=4, max=10))
 async def fetch_user_with_retry(db_context: DBContext, game_uid: str):
@@ -499,7 +501,7 @@ async def write_diary_event_generator(uid: str, user_name: str, role_name: str, 
 @app.post("/game/write_diary")
 async def write_diary(request: WriteDiary,db_context: DBContext = Depends(get_db_context),llm: BaseLLM = Depends(get_qwen_plus)):
     logging.info(f"游戏端日记请求，uid:{request.uid}")
-    user = db_context.user_db.get_user_by_game_uid(request.uid)
+    user =  await fetch_user_with_retry(db_context, request.uid)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -569,7 +571,7 @@ async def event_generator(uid: str, user_name: str, role_name: str, llm: BaseCha
 
 @app.post("/game/event_response")
 async def event_response(request: EventRequest,db_context: DBContext = Depends(get_db_context),llm: BaseChatModel = Depends(get_chat_qwen_max),backup_llm:BaseChatModel=Depends(get_glm4)):
-    user = db_context.user_db.get_user_by_game_uid(request.uid)
+    user =  await fetch_user_with_retry(db_context, request.uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     uid = user.guid
