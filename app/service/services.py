@@ -15,7 +15,7 @@ load_dotenv()
 DATABASE_CONNECTION_STRING = os.getenv("DATABASE_URL")
 engine = create_engine(
     DATABASE_CONNECTION_STRING,
-    pool_size=24,
+    pool_size=16,
     max_overflow=128,
     pool_pre_ping=True,  # 启用预检查
     pool_recycle=3600,
