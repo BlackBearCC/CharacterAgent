@@ -435,37 +435,93 @@ class CharacterAgent(AbstractAgent):
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
             raise e
+
+
+
     @staticmethod
     async def handle_information_search(role_info,db_context, uid, input_text, result_dict,data_dict, llm):
-        logging.info("Agent : 信息提供因子生成中...")
         game_uid = data_dict.get('game_uid', 'bkuslqpmpe')
+        logging.info("Agent : 信息提供因子生成中..."+game_uid)
+
 
         information = f"环境信息：+{data_dict.get('environment', '无')}"
-        # print(information)
-        data_pairs = ["\n冰箱数据："]
-        async with aiohttp.ClientSession() as session:
-            # 发送HTTP POST请求
-            async with session.post("http://101.43.31.140:12000/api/box_foods",
-                                    json={"guid": game_uid}) as resp:
-                if resp.status == 200:
-                    response_content = await resp.json()
-                    logging.info(f"Agent : 冰箱数据获取: {response_content}")
-                    # 获取数据
-                    data_list = response_content["data"]
-                    print(data_list)
-                    data_dicts = [item for item in data_list]  # 将数据转化为字典列表
-                    # 拼接字符串
-                    for data_dict in data_dicts:
-                        for key, value in data_dict.items():
-                            data_pairs.append(f"{key}={value}")
-        information += " ".join(data_pairs)
 
+        fridge_items = ["\n-冰箱物品数据："]
+        async with aiohttp.ClientSession() as session:
+            try:
+                # 发送HTTP POST请求
+                async with session.post("http://124.220.76.201:12000/api/box_foods", json={"guid": game_uid}) as resp:
+                    response_content = await resp.json()
+                    logging.info(f"Agent : 查询冰箱物品数据: {response_content}")
+
+                    # 检查响应中的'data'是否为空
+                    if not response_content.get("data"):
+                        fridge_items.append("没有物品！")
+                    else:
+                        data_list = response_content["data"]
+
+                        for data_dict in data_list:
+                            for key, value in data_dict.items():
+                                fridge_items.append(f"{key}={value}")
+
+            except aiohttp.ClientError as e:
+                logging.error(f"请求错误: {e}")
+                fridge_items.append("数据获取失败！")
+        # 将冰箱物品信息加入到总的环境信息中
+        information += " ".join(fridge_items)
+        # 查询储物柜数据
+        query_items = ["\n-储物柜数据： "]
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post("http://124.220.76.201:12000/api/query_items", json={"guid": game_uid,"count":10}) as resp:
+                    response_content = await resp.json()
+                    logging.info(f"Agent : 查询储物柜数据: {response_content}")
+                    """特定于查询储物柜数据的处理逻辑"""
+                    if not response_content.get("items"):
+                        return ["没有储物柜物品！"]
+                    else:
+                        data_list = response_content["items"]
+                        items_info = []
+                        for data_dict in data_list:
+                            for key, value in data_dict.items():
+                                items_info.append(f"{key}={value}")
+
+            except aiohttp.ClientError as e:
+                    logging.error(f"请求错误: {e}")
+                    query_items.append("数据获取失败！")
+
+        # 将储物柜物品信息加入到总的环境信息中
+        information += " ".join(query_items)
+
+        # 查询资源数据
+        query_resources = ["\n-金币和露水数据： "]
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post("http://124.220.76.201:12000/api/query_resource", json={"guid": game_uid}) as resp:
+                    response_content = await resp.json()
+                    logging.info(f"Agent : 查询资源数据: {response_content}")
+                    """特定于查询资源数据的处理逻辑"""
+                    coins_amount = response_content.get("coins", "未指定")
+                    dew_amount = response_content.get("dew", "未指定")
+                    resources_info = (
+                        f"金币数量：{coins_amount}，\n"
+                        f"露水数量：{dew_amount}。"
+                    )
+
+            except aiohttp.ClientError as e:
+                logging.error(f"请求错误: {e}")
+                query_resources.append("数据获取失败！")
+
+        information += resources_info
+
+
+        print("Agent : 环境信息生成中..."+information)
         system_prompt = DEEP_STRATEGY_SEARCH.format(
             role_info=role_info,
             user_input=input_text,
             information =information
         )
-        # print(system_prompt)
+
         prompt = PromptTemplate(template=system_prompt, input_variables=["user_input"])
         output_parser = StrOutputParser()
 
@@ -473,13 +529,13 @@ class CharacterAgent(AbstractAgent):
 
         try:
             response = await chain.ainvoke({"user_input": input_text})
-            logging.info(f"Agent : 信息提供因子生成中: {response}")
+            logging.info(f"Agent : 信息提供因子生成: {response}")
 
             return response
         except RateLimitError:
             logging.error("Rate limit reached, retrying...")
             response = await chain.ainvoke({"user_input": input_text})
-            print(f"Agent : 信息提供因子生成中: {response}")
+            print(f"Agent : 信息提供因子生成: {response}")
             return response
         except Exception as e:
             logging.error(f"Unexpected error occurred: {e}")
@@ -708,7 +764,7 @@ class CharacterAgent(AbstractAgent):
             return "快速回复"
 
 
-    async def  rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm,use_agent,game_uid=None)->AsyncGenerator[str, None]:
+    async def  rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm,use_agent,game_uid)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
         combined_content = ''
         environment_content =""
@@ -1256,7 +1312,7 @@ class CharacterAgent(AbstractAgent):
         else:
             logging.info("Agent 实体更新记忆: 跳过")
 
-    async def response(self, guid:str ,vector_db,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm,use_agent,game_uid=None) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,vector_db,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm,use_agent,game_uid) -> AsyncGenerator[str, None]:
 
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
@@ -1264,7 +1320,7 @@ class CharacterAgent(AbstractAgent):
         # human_message = Message(user_guid=guid, type="human", role=user_name, message=input_text,generate_from="GameUser")
         # logging.info(f"{guid},User Input: {input_text}")  # 记录用户输入的日志
         # db_context.message_memory.add_message(human_message)
-        async for chunk in self.rute_retriever(guid=guid,vector_db=vector_db,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm,game_uid=None,use_agent=use_agent):
+        async for chunk in self.rute_retriever(guid=guid,vector_db=vector_db,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm,game_uid=game_uid,use_agent=use_agent):
             yield chunk
         asyncio.create_task(self.memory_summary(guid=guid,user_name=user_name,role_name=role_name,message_threshold=10,db_context=db_context))
         asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))
