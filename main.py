@@ -354,7 +354,7 @@ async def add_role_log(request: RoleLog, user_db=Depends( get_user_database), me
 
 
 async def chat_generator(uid: str,game_uid, user_name: str, role_name: str, input_text: str, role_status: str,
-                        db_context: DBContext,vector_db:Milvus, llm,backup_llm) -> AsyncGenerator[str, None]:
+                        db_context: DBContext,vector_db:Milvus, llm,backup_llm,use_agent) -> AsyncGenerator[str, None]:
     retries = 3
     delay = 1  # 初始重试延迟时间（秒）
     max_delay = 6  # 最大重试延迟时间（秒）
@@ -368,7 +368,7 @@ async def chat_generator(uid: str,game_uid, user_name: str, role_name: str, inpu
         try:
             async for response_chunk in tuji_agent.response(guid=uid,game_uid=game_uid, user_name=user_name, role_name=role_name,
                                                             input_text=input_text, role_status=role_status,vector_db=vector_db,
-                                                            db_context=db_context, llm=current_llm):
+                                                            db_context=db_context, llm=current_llm,use_agent=use_agent):
                 yield response_chunk
 
             # 成功获取数据，退出循环
@@ -435,7 +435,7 @@ async def fetch_user_with_retry(db_context: DBContext, game_uid: str):
 
 @app.post("/game/chat")
 async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_glm4)):
-    logging.info(f"收到游戏聊天请求，UID: {request.uid}。 输入: {request.input}。角色状态: {request.role_status}")
+    logging.info(f"收到游戏常规聊天请求，UID: {request.uid}。 输入: {request.input}。角色状态: {request.role_status}")
     try:
         game_uid = request.uid
         user = await fetch_user_with_retry(db_context, request.uid)
@@ -450,7 +450,34 @@ async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_
 
         generator = chat_generator(uid,game_uid, user_name, role_name, request.input, role_status=role_status,
                                    llm=llm,backup_llm=backup_llm,vector_db=vector_db,
-                                             db_context=db_context)
+                                             db_context=db_context,use_agent=False)
+        return EventSourceResponse(generator)
+
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"启动聊天会话失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="启动聊天会话失败")
+
+@app.post("/game/chat/agent")
+async def generate(request: ChatRequest, db_context: DBContext = Depends(get_db_context),llm = Depends(get_qwen_max_llm),backup_llm = Depends(get_glm4)):
+    logging.info(f"收到游戏深度聊天请求，UID: {request.uid}。 输入: {request.input}。角色状态: {request.role_status}")
+    try:
+        game_uid = request.uid
+        user = await fetch_user_with_retry(db_context, request.uid)
+
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        uid = user.guid
+        user_name = user.username
+        role_name = user.role_name
+        role_status = request.role_status
+
+        generator = chat_generator(uid,game_uid, user_name, role_name, request.input, role_status=role_status,
+                                   llm=llm,backup_llm=backup_llm,vector_db=vector_db,
+                                             db_context=db_context,use_agent=True)
         return EventSourceResponse(generator)
 
 

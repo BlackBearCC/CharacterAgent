@@ -708,7 +708,7 @@ class CharacterAgent(AbstractAgent):
             return "快速回复"
 
 
-    async def  rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm,game_uid=None)->AsyncGenerator[str, None]:
+    async def  rute_retriever(self, guid:str,vector_db,user_name,role_name, query: str,role_status:str, db_context: DBContext,llm,use_agent,game_uid=None)->AsyncGenerator[str, None]:
         logging.info("Agent : 检索对话知识库中...")
         combined_content = ''
         environment_content =""
@@ -764,12 +764,102 @@ class CharacterAgent(AbstractAgent):
             'emotion': self.agent_deep_emotion(db_context=db_context, uid=guid, input_text=query, llm=tllm),
             'context': self.agent_deep_context(db_context=db_context, uid=guid, input_text=query, llm=tllm)
         }
-        conversational= await self.conversation_rute(role_info=role_status, input_text=query,context=history,match_kg=combined_content,llm=llm)
+        if not use_agent:
+            conversational = await self.conversation_rute(role_info=role_status, input_text=query, context=history,
+                                                          match_kg=combined_content, llm=llm)
 
-        if "快速回复" in conversational:
-            async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,match_kg=combined_content,
-                                                  role_status=role_status,data_dict=data_dict,
-                                                  user_name=user_name, role_name=role_name, guid=guid, query=query, llm=llm):
+            if "快速回复" in conversational:
+                async for r in self.response_fast(prompt_type=PromptType.FAST_CHAT, db_context=db_context,
+                                                  match_kg=combined_content,
+                                                  role_status=role_status, data_dict=data_dict,
+                                                  user_name=user_name, role_name=role_name, guid=guid, query=query,
+                                                  llm=llm):
+                    yield r
+            else:
+                results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+                result_dict = {}
+                for key, result in zip(tasks.keys(), results):
+                    # 如果有任务抛出异常，这里会捕获异常而不是直接中断程序
+                    if isinstance(result, Exception):
+                        result_dict[key] = f"无"
+                    else:
+                        result_dict[key] = result
+                intent = result_dict['intent']
+                intent_mapping = {
+                    "表达诉求": "表达诉求",
+                    "观点评价": "观点评价",
+                    "重复表达": "重复表达",
+                    "现实实体查询": "事实转换",
+                    "攻击角色": "防御对话",
+                    "情感陪伴": "情感陪伴",
+                    "信息查询": "信息查找",
+                    "闲聊": "深度回复",  # 添加对'闲聊'的处理
+                }
+
+                # 根据intent获取对应的action
+                if intent in intent_mapping:
+                    action = intent_mapping[intent]
+                else:
+                    # 如果intent没有匹配到预定义的值，可以设定一个默认行为或者抛出错误等
+                    action = "深度回复"  # 示例默认值，根据实际情况调整
+
+                data_to_flag = json.dumps({"action": action, "text": None}, ensure_ascii=False)
+                yield data_to_flag
+
+                KEYWORD_HANDLERS = {
+                    "上下文记忆": self.handle_context_memory,
+                    "用户实体": self.handle_user_profile,
+                    "情感共情": self.handle_emotional_engagement,
+                    "持续关注": self.handle_sustained_attention,
+                    "自我特质": self.handle_role_trait_response,
+                    "问候和关心": self.handle_greetings_and_care,
+                    "切换话题": self.handle_topic_switch,
+                    "保持角色": self.handle_maintain_role,
+                    "实体转换": self.handle_entity_transfer,
+                    "信息提供": self.handle_information_search,
+                }
+
+                deep_choice_result = await self.agent_deep_choice(db_context=db_context, uid=guid, input_text=query,
+                                                                  result_dict=result_dict, llm=ollm)
+                result_dict['chosen_strategies'] = deep_choice_result
+                result_dict['role_chat_style'] = combined_content
+                # 添加判断逻辑
+                matched_keywords = [keyword for keyword in KEYWORD_HANDLERS if keyword in deep_choice_result]
+                strategy_result_value = ""
+                if matched_keywords:
+                    tasks = {
+                        keyword: (KEYWORD_HANDLERS[keyword],
+                                  {'role_info': self.base_info, 'db_context': db_context, 'uid': guid,
+                                   'input_text': query,
+                                   'result_dict': result_dict, 'data_dict': data_dict,
+                                   'llm': ollm})
+                        for keyword in matched_keywords
+                    }
+
+                    results = await asyncio.gather(
+                        *[asyncio.create_task(handler(**kwargs)) for handler, kwargs in tasks.values()],
+                        return_exceptions=True
+                    )
+
+                    for keyword, result in zip(tasks.keys(), results):
+                        if isinstance(result, Exception):
+                            logging.warning(f"处理策略 '{keyword}' 时发生错误: {result}")
+                        else:
+                            strategy_result_value += f"{keyword}因子: {result}\n"  # 使用换行符分隔每个结果
+                            result_dict['strategy_result'] = strategy_result_value
+
+                else:
+                    logging.info("未检测到特定策略")
+
+                result_dict["strategy_result"] = strategy_result_value
+
+                # result = ""
+                # try:
+                async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,
+                                                      action=action,
+                                                      input_text=query, result_dict=result_dict, data_dict=data_dict,
+                                                      llm=ollm):
+                    # result += r
                     yield r
         else:
             results = await asyncio.gather(*tasks.values(), return_exceptions=True)
@@ -799,11 +889,8 @@ class CharacterAgent(AbstractAgent):
                 # 如果intent没有匹配到预定义的值，可以设定一个默认行为或者抛出错误等
                 action = "深度回复"  # 示例默认值，根据实际情况调整
 
-
             data_to_flag = json.dumps({"action": action, "text": None}, ensure_ascii=False)
             yield data_to_flag
-
-
 
             KEYWORD_HANDLERS = {
                 "上下文记忆": self.handle_context_memory,
@@ -828,8 +915,9 @@ class CharacterAgent(AbstractAgent):
             if matched_keywords:
                 tasks = {
                     keyword: (KEYWORD_HANDLERS[keyword],
-                              {'role_info': self.base_info, 'db_context': db_context, 'uid': guid, 'input_text': query,
-                               'result_dict': result_dict,'data_dict':data_dict,
+                              {'role_info': self.base_info, 'db_context': db_context, 'uid': guid,
+                               'input_text': query,
+                               'result_dict': result_dict, 'data_dict': data_dict,
                                'llm': ollm})
                     for keyword in matched_keywords
                 }
@@ -853,16 +941,12 @@ class CharacterAgent(AbstractAgent):
 
             # result = ""
             # try:
-            async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,action=action,
-                                                      input_text=query, result_dict=result_dict,data_dict=data_dict, llm=ollm):
-                    # result += r
-                    yield r
-
-
-
-
-
-
+            async for r in self.agent_deep_output(db_context=db_context, uid=guid, role_status=role_status,
+                                                  action=action,
+                                                  input_text=query, result_dict=result_dict, data_dict=data_dict,
+                                                  llm=ollm):
+                # result += r
+                yield r
         # yield "dd"
         # if avg_score < self.similarity_threshold:
         #     print("Agent : 相似度分数低于阈值，使用FastChain 进行回答")
@@ -1172,7 +1256,7 @@ class CharacterAgent(AbstractAgent):
         else:
             logging.info("Agent 实体更新记忆: 跳过")
 
-    async def response(self, guid:str ,vector_db,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm,game_uid=None) -> AsyncGenerator[str, None]:
+    async def response(self, guid:str ,vector_db,user_name,role_name,input_text: str,role_status,db_context: DBContext,llm,use_agent,game_uid=None) -> AsyncGenerator[str, None]:
 
         # 初始化检索链
         # retriever_lambda = RunnableLambda(self.rute_retriever)
@@ -1180,7 +1264,7 @@ class CharacterAgent(AbstractAgent):
         # human_message = Message(user_guid=guid, type="human", role=user_name, message=input_text,generate_from="GameUser")
         # logging.info(f"{guid},User Input: {input_text}")  # 记录用户输入的日志
         # db_context.message_memory.add_message(human_message)
-        async for chunk in self.rute_retriever(guid=guid,vector_db=vector_db,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm,game_uid=None):
+        async for chunk in self.rute_retriever(guid=guid,vector_db=vector_db,user_name=user_name,role_name=role_name, query=input_text,role_status=role_status,db_context=db_context,llm=llm,game_uid=None,use_agent=use_agent):
             yield chunk
         asyncio.create_task(self.memory_summary(guid=guid,user_name=user_name,role_name=role_name,message_threshold=10,db_context=db_context))
         asyncio.create_task(self.memory_entity(guid, user_name, role_name, 10, db_context))
