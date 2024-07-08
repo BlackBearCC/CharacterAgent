@@ -27,6 +27,7 @@ class RoleLog(BaseModel):
         return None
 
 
+
 class ChatRequest(BaseModel):
     uid: str  # 用户id
     input: str # 玩家输入

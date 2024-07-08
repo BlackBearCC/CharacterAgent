@@ -30,6 +30,7 @@ import os
 from langchain_core.language_models import BaseLLM, BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from pydantic import BaseModel
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -53,6 +54,9 @@ from data.database.mysql.message_summary import MessageSummary
 
 from data.database.mysql.models import Message, Message_Summary
 from data.database.mysql.user_management import UserDatabase
+from modules.agent import AIAgent
+from modules.cognitive_module import CognitiveModule
+from modules.data_context import DataContextManager
 
 from utils.placeholder_replacer import PlaceholderReplacer
 from gradio_client import Client
@@ -304,7 +308,7 @@ async def generate_wav(request: GenerateSound,client = Depends(get_client)):
         logging.error(f"语音合成失败: {str(e)}")
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"error": f"语音合成失败: {str(e)}"})
 
-
+  
 
 
 @app.post("/create_game_user")
@@ -424,10 +428,19 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    message_memory: MessageMemory = Depends(get_message_memory),
                    message_summary: MessageSummary = Depends(get_message_summary),
                    entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
-    return DBContext(user_db=user_db, message_memory=message_memory,message_summary=message_summary, entity_memory=entity_memory)
+    return DBContext(user_db=user_db, message_memory=message_memory, message_summary=message_summary, entity_memory=entity_memory)
 
+# def get_data_context(user_input: ChatRequest ):
+#     return DataContextManager(db_context,"3d5001c0-d479-49a5-ae91-c3ec07828426")
 
-
+@app.post("/dialogue")
+async def dialogue(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
+    data_manager = DataContextManager(db_context, request.uid)
+    # llm = Tongyi(api_key=tongyi_api_key)
+    ai_agent = AIAgent(data_manager)
+    print("开始对话")
+    response = await ai_agent.process_input( request.input)
+    return {"response": response}
 # 定义重试装饰器，最多尝试3次，每次重试之间随机指数退避延迟
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, min=4, max=10))
 async def fetch_user_with_retry(db_context: DBContext, game_uid: str):
