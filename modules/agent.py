@@ -15,7 +15,7 @@ class AIAgent:
 
     async def process_input(self, input_text):
         emotions = await self.cognitive_module.analyze_emotions( input_text)
-        # intent = await self.cognitive_module.analyze_intent(llm, input_text)
+        intent = await self.cognitive_module.analyze_intent( input_text)
         # Add further module processing here
-        response = f"Emotion: {emotions}"
+        response = f"Emotion: {emotions}\nIntent: {intent}"
         return response

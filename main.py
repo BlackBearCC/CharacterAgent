@@ -430,8 +430,8 @@ def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    entity_memory: EntityMemory = Depends(get_entity_memory)) -> DBContext:
     return DBContext(user_db=user_db, message_memory=message_memory, message_summary=message_summary, entity_memory=entity_memory)
 
-# def get_data_context(user_input: ChatRequest ):
-#     return DataContextManager(db_context,"3d5001c0-d479-49a5-ae91-c3ec07828426")
+def get_data_context(request: ChatRequest , db_context: DBContext = Depends(get_db_context)):
+    return DataContextManager(db_context,request.uid)
 
 @app.post("/dialogue")
 async def dialogue(request: ChatRequest, db_context: DBContext = Depends(get_db_context)):
