@@ -6,19 +6,16 @@ from ai.prompts.deep_agent import DEEP_EMOTION, DEEP_INTENT, DEEP_CONTEXT
 from modules.base_mind_module import BaseMindModule
 
 
-# 假设 BaseMindModule, DEEP_EMOTION, DEEP_INTENT, DEEP_CONTEXT, 和其他相关类/常量已经在其他地方被正确定义。
-
 class CognitiveModule(BaseMindModule):
 
     async def invoke_cognitive_chain(self, chain_type: str,prompt_templet, input_text: str) -> Any:
-        """通用的调用链路处理函数，减少代码重复。"""
         logging.info(f"Agent: Performing {chain_type}...")
         invoke_input = {"user_input": input_text}
         try:
             return await self.invoke_chain(prompt_templet, invoke_input=invoke_input, conversation_history=self.data_context_manager.messages)
         except Exception as e:
             logging.error(f"Error processing {chain_type}: {e}")
-            return None  # 根据实际情况，这里可以返回更合适的值或抛出自定义异常
+            return None
 
     async def analyze_emotions(self, input_text: str) -> Any:
         return await self.invoke_cognitive_chain("analyze_emotions",DEEP_EMOTION, input_text)
@@ -35,9 +32,8 @@ class CognitiveModule(BaseMindModule):
             self.analyze_intent(input_text),
             self.extract_key_content(input_text)
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)  # 允许异常返回，以便后续处理
-        emotions, intent, key_context = [result for result in results if result is not None]  # 过滤掉None值
-        # 对于异常情况，这里简化处理为"Error"，实际使用中可以根据需要定制处理逻辑
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        emotions, intent, key_context = [result for result in results if result is not None]
         emotions = emotions if isinstance(emotions, str) else "Error"
         intent = intent if isinstance(intent, str) else "Error"
         key_context = key_context if isinstance(key_context, str) else "Error"
