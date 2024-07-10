@@ -15,6 +15,7 @@ class BaseMindModule:
         self.data_context_manager = data_context_manager
         self.tongyi_api_key = os.getenv('DASHSCOPE_API_KEY')
 
+
     async def invoke_chain(self, prompt_template, invoke_input: dict, **kwargs):
         llm = Tongyi(model_name="qwen-turbo", temperature=0.7, top_k=100, top_p=0.9, dashscope_api_key=self.tongyi_api_key)
         prompt_text = self.generate_prompt_text(prompt_template, **kwargs)
