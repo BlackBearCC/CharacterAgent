@@ -248,6 +248,7 @@ tuji_agent = CharacterAgent(base_info=base_info,
 
 
 
+
 def get_client():
     base_url = os.getenv("TTS_API_URL")
     client = Client(base_url)
