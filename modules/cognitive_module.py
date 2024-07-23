@@ -3,6 +3,7 @@ import logging
 import os
 from typing import Any
 
+from dotenv import load_dotenv
 from mem0 import Memory, MemoryClient
 from transformers import pipeline
 
@@ -14,7 +15,7 @@ from modules.data_context import DataContextManager
 class CognitiveModule(BaseMindModule):
     def __init__(self, data_context_manager: DataContextManager):
         super().__init__(data_context_manager)
-        self.classifier = pipeline("zero-shot-classification", model="MoritzLaurer/mDeBERTa-v3-base-mnli-xnli")
+        # self.classifier = pipeline("zero-shot-classification", model="MoritzLaurer/mDeBERTa-v3-base-mnli-xnli")
     async def invoke_cognitive_chain(self, chain_type: str,prompt_templet, input_text: str) -> Any:
         """
         调用指定的chain类型，并返回结果。
@@ -63,8 +64,12 @@ class CognitiveModule(BaseMindModule):
         #     {"role": "assistant",
         #      "content": "好的，兔子很可爱"}
         # ]
+        load_dotenv()
+        # openai_key = os.getenv("OPENAI_API_KEY")
+        # os.environ["OPENAI_API_KEY"]="sk-proj-tSELZo790pSLBMUGgqAiT3BlbkFJ00cd158DIMTNSTdZAuy6"
+        memo_api_key = os.getenv('MEMOAI_API_KEY')
         logging.info(f"Agent: Performing memo_ai...")
-        client = MemoryClient(api_key="m0-H6IBBqYkmqnIMNjameNIEeqJiCPwVJTSphGNRRpX")
+        client = MemoryClient(api_key=memo_api_key)
         # result = client.add(messages, user_id="datou")
         result = client.search("我喜欢什么", user_id="datou")
         print(f"搜索结果：{result}")
