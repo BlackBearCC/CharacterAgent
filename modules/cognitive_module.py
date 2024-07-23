@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
 from typing import Any
 
+from mem0 import Memory, MemoryClient
 from transformers import pipeline
 
 from ai.prompts.deep_agent import DEEP_EMOTION, DEEP_INTENT, DEEP_CONTEXT
@@ -33,13 +35,40 @@ class CognitiveModule(BaseMindModule):
         使用transformers库的pipeline函数创建一个分类器，并使用它对输入文本进行情感分析。
         """
         from transformers import pipeline
-
+        # openai_key = os.getenv("OPENAI_API_KEY")
+        # os.environ["OPENAI_API_KEY"]="sk-proj-tSELZo790pSLBMUGgqAiT3BlbkFJ00cd158DIMTNSTdZAuy6"
         sequence_to_classify = input_text
         candidate_labels = ["状态", "情感", "工作", "喜好"]
         output = self.classifier(sequence_to_classify, candidate_labels, multi_label=False)
-        # print(output)
+        print(output)
+        # m = Memory()
+        # messages = [
+        #     {"role": "user", "content": "我喜欢兔子"},
+        #     {"role": "assistant",
+        #      "content": "好的，兔子很可爱"}
+        # ]
+        # client = MemoryClient(api_key="m0-H6IBBqYkmqnIMNjameNIEeqJiCPwVJTSphGNRRpX")
+        # result = client.add(  messages, user_id="datou"
+        #
+        #                     )
+        # print(result)
+        # result = client.search("我喜欢什么",user_id="datou")
+        # print(f"搜索结果：{result}")
+
         return output
 
+    async def memo_ai(self, input_text: str) -> Any:
+        # messages = [
+        #     {"role": "user", "content": "我喜欢兔子"},
+        #     {"role": "assistant",
+        #      "content": "好的，兔子很可爱"}
+        # ]
+        logging.info(f"Agent: Performing memo_ai...")
+        client = MemoryClient(api_key="m0-H6IBBqYkmqnIMNjameNIEeqJiCPwVJTSphGNRRpX")
+        # result = client.add(messages, user_id="datou")
+        result = client.search("我喜欢什么", user_id="datou")
+        print(f"搜索结果：{result}")
+        return result
     async def analyze_intent(self, input_text: str) -> Any:
         return await self.invoke_cognitive_chain("analyze_intent",DEEP_INTENT, input_text)
 
@@ -51,15 +80,16 @@ class CognitiveModule(BaseMindModule):
         tasks = [
             self.analyze_emotions(input_text),
             self.analyze_intent(input_text),
-            self.extract_key_content(input_text)
+            self.extract_key_content(input_text),
+            self.memo_ai(input_text)
         ]
 
         # ml_results = self.machine_analyze_emotion(input_text)
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        emotions, intent, key_context = [result for result in results if result is not None]
+        emotions, intent, key_context,memo_ai = [result for result in results if result is not None]
         emotions = emotions if isinstance(emotions, str) else "Error"
         intent = intent if isinstance(intent, str) else "Error"
         key_context = key_context if isinstance(key_context, str) else "Error"
-        response = f"Emotion: {emotions}\nIntent: {intent}\nKey Context: {key_context}\n机器学习预测结果：{ml_results}"
+        response = f"Emotion: {emotions}\nIntent: {intent}\nKey Context: {key_context}\nMemoAi：{memo_ai}"
         # response = f"机器学习预测结果：{ml_results}"
         return response
