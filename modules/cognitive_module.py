@@ -36,8 +36,8 @@ class CognitiveModule(BaseMindModule):
         使用transformers库的pipeline函数创建一个分类器，并使用它对输入文本进行情感分析。
         """
         from transformers import pipeline
-        # openai_key = os.getenv("OPENAI_API_KEY")
-        # os.environ["OPENAI_API_KEY"]="sk-proj-tSELZo790pSLBMUGgqAiT3BlbkFJ00cd158DIMTNSTdZAuy6"
+
+
         sequence_to_classify = input_text
         candidate_labels = ["状态", "情感", "工作", "喜好"]
         output = self.classifier(sequence_to_classify, candidate_labels, multi_label=False)
@@ -48,7 +48,7 @@ class CognitiveModule(BaseMindModule):
         #     {"role": "assistant",
         #      "content": "好的，兔子很可爱"}
         # ]
-        # client = MemoryClient(api_key="m0-H6IBBqYkmqnIMNjameNIEeqJiCPwVJTSphGNRRpX")
+
         # result = client.add(  messages, user_id="datou"
         #
         #                     )
@@ -66,7 +66,7 @@ class CognitiveModule(BaseMindModule):
         # ]
         load_dotenv()
         # openai_key = os.getenv("OPENAI_API_KEY")
-        # os.environ["OPENAI_API_KEY"]="sk-proj-tSELZo790pSLBMUGgqAiT3BlbkFJ00cd158DIMTNSTdZAuy6"
+
         memo_api_key = os.getenv('MEMOAI_API_KEY')
         logging.info(f"Agent: Performing memo_ai...")
         client = MemoryClient(api_key=memo_api_key)
