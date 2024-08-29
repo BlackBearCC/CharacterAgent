@@ -1,3 +1,4 @@
+from datetime import datetime
 import time
 import redis
 from typing import Any, Dict, List
@@ -102,9 +103,18 @@ class MemoryModule:
             message_data = self.redis.hgetall(f"message:{message_id.decode()}")
             messages.append({k.decode(): v.decode() for k, v in message_data.items()})
         
-        return messages
+        return self.format_messages(messages)
 
 
     def end_session(self, user_id: str, session_id: str):
         # 将会话数据保存到长期存储的逻辑
         pass
+    
+    def format_messages(self, messages: List[Dict[str, Any]]) -> str:
+            formatted_messages = []
+            for message in messages:
+                timestamp = int(message['timestamp']) / 1000  # 转换为秒
+                date_time = datetime.fromtimestamp(timestamp).strftime('%Y年%m月%d日 %H:%M:%S')
+                formatted_message = f"{date_time}, {message['role']}：{message['content']}"
+                formatted_messages.append(formatted_message)
+            return "\n".join(formatted_messages)

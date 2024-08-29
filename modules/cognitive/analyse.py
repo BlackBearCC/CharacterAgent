@@ -6,13 +6,13 @@ class AnalyseModule:
     def __init__(self, invoke_chain_func):
         self.invoke_chain = invoke_chain_func
 
-    async def analyze(self, focused_data: Dict[str, Any], memory_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze(self, focused_data: Dict[str, Any],input_text:str, memory_context: str) -> Dict[str, Any]:
         input_text = focused_data.get("processed_input", {}).get("user_input", "")
         
         tasks = [
-            self._analyze_emotion(input_text),
-            self._analyze_intent(input_text),
-            self._analyze_context(input_text)
+            self._analyze_emotion(input_text,memory_context),
+            self._analyze_intent(input_text,memory_context),
+            self._analyze_context(input_text,memory_context)
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -24,11 +24,11 @@ class AnalyseModule:
             "context": context if isinstance(context, str) else "Error"
         }
 
-    async def _analyze_emotion(self, input_text: str) -> str:
-        return await self.invoke_chain("analyze_emotions", DEEP_EMOTION, input_text)
+    async def _analyze_emotion(self, input_text: str,memory_context:str) -> str:
+        return await self.invoke_chain("analyze_emotions", DEEP_EMOTION, input_text,memory_context)
 
-    async def _analyze_intent(self, input_text: str) -> str:
-        return await self.invoke_chain("analyze_intent", DEEP_INTENT, input_text)
+    async def _analyze_intent(self, input_text: str,memory_context:str) -> str:
+        return await self.invoke_chain("analyze_intent", DEEP_INTENT, input_text,memory_context)
 
-    async def _analyze_context(self, input_text: str) -> str:
-        return await self.invoke_chain("extract_key_content", DEEP_CONTEXT, input_text)
+    async def _analyze_context(self, input_text: str,memory_context:str) -> str:
+        return await self.invoke_chain("extract_key_content", DEEP_CONTEXT, input_text,memory_context)
