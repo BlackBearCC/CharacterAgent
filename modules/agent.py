@@ -15,5 +15,5 @@ class AIAgent:
         # self.constraint_module = ConstraintModule(data_context)
         # self.reflection_module = ReflectionModule(data_context)
 
-    async def process_input (self, input_text: str) -> str:
-        return await self.cognitive_module.process_input(input_text)
+    async def process_input (self, input_text: str,user_id:str) -> str:
+        return await self.cognitive_module.process_input(input_text,user_id)

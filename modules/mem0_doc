@@ -1,0 +1,310 @@
+平台
+快速入门
+几分钟内即可开始使用 Mem0 平台
+
+​
+1.安装
+
+点子
+
+npm
+
+pip install mem0ai
+​
+2. API 密钥设置
+登录Mem0 平台
+从仪表板复制您的 API 密钥
+从 Mem0 平台获取 API 密钥
+
+​
+3. 实例化客户端
+
+Python
+
+JavaScript
+
+from mem0 import MemoryClient
+client = MemoryClient(api_key="your-api-key")
+​
+4. 内存操作
+Mem0 提供了一个简单、可定制的接口，用于对内存执行 CRUD 操作。
+
+​
+4.1 创造回忆
+您可以为您的用户、AI 代理等创建长期和短期记忆。以下是一些示例：
+
+​
+用户的长期记忆
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+messages = [
+    {"role": "user", "content": "Hi, I'm Alex. I'm a vegetarian and I'm allergic to nuts."},
+    {"role": "assistant", "content": "Hello Alex! I've noted that you're a vegetarian and have a nut allergy. I'll keep this in mind for any food-related recommendations or discussions."}
+]
+client.add(messages, user_id="alex")
+​
+用户会话的短期记忆
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+messages = [
+    {"role": "user", "content": "I'm planning a trip to Japan next month."},
+    {"role": "assistant", "content": "That's exciting, Alex! A trip to Japan next month sounds wonderful. Would you like some recommendations for vegetarian-friendly restaurants in Japan?"},
+    {"role": "user", "content": "Yes, please! Especially in Tokyo."},
+    {"role": "assistant", "content": "Great! I'll remember that you're interested in vegetarian restaurants in Tokyo for your upcoming trip. I'll prepare a list for you in our next interaction."}
+]
+client.add(messages, user_id="alex123", session_id="trip-planning-2024")
+​
+代理的长期记忆
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+messages = [
+    {"role": "system", "content": "You are a personalized travel assistant. Remember user preferences and provide tailored recommendations."},
+    {"role": "assistant", "content": "Understood. I'll maintain personalized travel preferences for each user and provide customized recommendations based on their dietary restrictions, interests, and past interactions."}
+]
+client.add(messages, agent_id="travel-assistant")
+您可以监控平台上的内存操作：
+
+Mem0 平台活动
+
+​
+4.2 搜索相关记忆
+您还可以使用我们的搜索方法获取给定自然语言问题的相关记忆。
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+query = "What do you know about me?"
+client.search(query, user_id="alex")
+​
+使用自定义过滤器进行搜索
+您还可以使用自定义过滤器以及 user_id、agent_id、app_id 等搜索记忆。
+
+这里需要定义version搜索v2方法。
+
+示例 1：使用 user_id 和 agent_id 过滤器进行搜索
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+query = "What do you know about me?"
+filters = {
+   "AND":[
+      {
+         "user_id":"alex"
+      },
+      {
+         "agent_id":{
+            "in":[
+               "travel-assistant",
+               "customer-support"
+            ]
+         }
+      }
+   ]
+}
+client.search(query, version="v2", filters=filters)
+示例 2：使用日期过滤器进行搜索
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+query = "What do you know about me?"
+filters = {
+    "AND": [
+        {"order_date": {"gte": "2024-07-20", "lte": "2024-07-10"}},
+        {"status": "completed"}
+    ]
+}
+client.search(query, version="v2", filters=filters)
+​
+4.3 获取所有用户
+获取所有存在记忆的用户、代理和会话。
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+client.users()
+​
+4.4 获取全部记忆
+使用 getAll() 方法获取用户、代理或会话的所有记忆。
+
+​
+获得 AI Agent 的所有记忆
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+client.get_all(agent_id="travel-assistant")
+​
+获取用户所有记忆
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+user_memories = client.get_all(user_id="alex")
+​
+获取某个会话的短期记忆
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+short_term_memories = client.get_all(user_id="alex123", session_id="trip-planning-2024")
+​
+获取特定内存
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+memory = client.get(memory_id="582bbe6d-506b-48c6-a4c6-5df3b1e63428")
+​
+4.5 记忆历史
+获取记忆随时间变化的历史记录
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+# Add some message to create history
+messages = [{"role": "user", "content": "I recently tried chicken and I loved it. I'm thinking of trying more non-vegetarian dishes.."}]
+client.add(messages, user_id="alex")
+
+# Add second message to update history
+messages.append({'role': 'user', 'content': 'I turned vegetarian now.'})
+client.add(messages, user_id="alex")
+
+# Get history of how memory changed over time
+memory_id = "<memory-id-here>"
+history = client.history(memory_id)
+​
+4.6 更新内存
+使用新数据更新记忆。
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+message = "I recently tried chicken and I loved it. I'm thinking of trying more non-vegetarian dishes.."
+client.update(memory_id, message)
+​
+4.7 删除记忆
+删除特定记忆：
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+client.delete(memory_id)
+删除用户的所有记忆：
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+client.delete_all(user_id="alex")
+删除所有用户：
+
+
+Python
+
+JavaScript
+
+输出
+
+client.delete_users()
+add()有趣的事实：您还可以通过传递自然语言命令来使用该方法删除内存：
+
+
+Python
+
+JavaScript
+
+卷曲
+
+输出
+
+client.add("Delete all of my food preferences", user_id="alex")

@@ -21,19 +21,12 @@ from langchain_community.chat_models import ChatZhipuAI, ChatTongyi, ChatOllama
 
 from langchain_community.embeddings import OllamaEmbeddings, DashScopeEmbeddings
 #ModelScopeEmbeddings
-from langchain_community.llms.ollama import Ollama
 from langchain_community.llms.tongyi import Tongyi
 from langchain_community.vectorstores import Milvus
 
 import os
 
 from langchain_core.language_models import BaseLLM, BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from pydantic import BaseModel
-from sqlalchemy import create_engine
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, scoped_session
 from sse_starlette import EventSourceResponse
 from starlette.responses import JSONResponse, FileResponse
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -60,16 +53,6 @@ from modules.data_context import DataContextManager
 
 from utils.placeholder_replacer import PlaceholderReplacer
 from gradio_client import Client
-from langchain_community.llms import Ollama
-
-
-# setup_database(engine)
-# # 创建全局实例
-# user_database = UserDatabase(Session)
-# message_memory = MessageMemory(Session)
-# entity_memory = EntityMemory(Session)
-
-
 
 
 load_dotenv()
@@ -411,19 +394,6 @@ async def chat_generator(uid: str,game_uid, user_name: str, role_name: str, inpu
                             data_to_send = json.dumps({"action": "胡言乱语", "text": r}, ensure_ascii=False)
                             yield data_to_send
 
-    # except ValueError as ve:
-    #     logging.error(f"生成聊天响应时出现Value错误: {ve}")
-    #     yield f"处理请求时出错: {ve}"
-    # except ConnectionError as ce:
-    #     logging.error(f"与聊天服务连接错误: {ce}")
-    #     yield f"服务暂时不可用: {ce}"
-    # except Exception as e:
-    #     logging.error(f"聊天事件生成器中出现意外错误: {e}")
-    #     yield f"发生了意外错误: {e}"
-    # finally:
-    #     llm = Tongyi(api_key=tongyi_api_key)
-    #     await tuji_agent.summary(user_name=user_name, role_name=role_name, guid=uid, message_threshold=10,llm=llm,
-    #                              db_context=db_context)
 
 def get_db_context(user_db: UserDatabase = Depends(get_user_database),
                    message_memory: MessageMemory = Depends(get_message_memory),
@@ -440,7 +410,7 @@ async def dialogue(request: ChatRequest, db_context: DBContext = Depends(get_db_
     # llm = Tongyi(api_key=tongyi_api_key)
     ai_agent = AIAgent(data_manager)
     print("开始对话")
-    response = await ai_agent.process_input( request.input)
+    response = await ai_agent.process_input( request.input,request.uid)
     return {"response": response}
 # 定义重试装饰器，最多尝试3次，每次重试之间随机指数退避延迟
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, min=4, max=10))
