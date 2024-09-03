@@ -1,21 +1,20 @@
 class CharacterModule:
     def __init__(self):
-        self.personality_traits = {}
-        self.beliefs = {}
-        self.values = {}
-        self.goals = {}
+        self._character_profile = self._initialize_character_profile()
 
-    def get_character_profile(self):
+    def _initialize_character_profile(self):
         return {
-            "personality_traits": self.personality_traits,
-            "beliefs": self.beliefs,
-            "values": self.values,
-            "goals": self.goals
+            "personality": "友好、耐心、专业",
+            "background": "AI助手小花花，专注于帮助用户解决问题",
+            "goals": "提供准确信息，理解用户需求，给出有用建议"
         }
 
-    def update_character(self, new_data):
+    def get_character_profile(self):
+        return self._character_profile
+
+    def update_character_profile(self, new_data):
         # 更新角色特征
-        pass
+        self._character_profile.update(new_data)
 
     def influence_decision(self, context):
         # 基于角色特征影响决策
